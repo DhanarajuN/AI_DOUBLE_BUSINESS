@@ -27,6 +27,14 @@ class LoginViewModel extends ChangeNotifier {
     return _authRepository.loginWithGoogle();
   }
 
+  Future<void> continueAsGuest() {
+    return _authRepository.continueAsGuest();
+  }
+
+  Future<void> continueWithEmail(String email) {
+    return _authRepository.continueWithEmail(email);
+  }
+
   @override
   void dispose() {
     _authRepository.removeListener(notifyListeners);

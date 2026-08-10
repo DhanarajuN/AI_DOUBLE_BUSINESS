@@ -147,6 +147,28 @@ class AuthRepository extends ChangeNotifier {
     _status = AuthStatus.authenticated;
   }
 
+  Future<void> continueWithEmail(String email) async {
+    final trimmed = email.trim();
+    final name = trimmed.contains('@') ? trimmed.split('@').first : trimmed;
+    final user = User(id: 'local-$trimmed', name: name.isEmpty ? 'Guest' : name, username: trimmed, roleName: 'guest');
+    await _sessionStorage.saveSession(accessToken: '', token: '', user: user);
+    _apiClient.setAccessToken('');
+    _currentUser = user;
+    _status = AuthStatus.authenticated;
+    AppLogger.i('AuthRepository', 'continuing with email $trimmed (no backend account)');
+    notifyListeners();
+  }
+
+  Future<void> continueAsGuest() async {
+    const guest = User(id: 'guest', name: 'Guest', username: '', roleName: 'guest');
+    await _sessionStorage.saveSession(accessToken: '', token: '', user: guest);
+    _apiClient.setAccessToken('');
+    _currentUser = guest;
+    _status = AuthStatus.authenticated;
+    AppLogger.i('AuthRepository', 'continuing as guest');
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     AppLogger.i('AuthRepository', 'logout');
     await _sessionStorage.clearSession();

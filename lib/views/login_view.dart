@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../repositories/auth_repository.dart';
+import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/login_view_model.dart';
-import '../widgets/google_logo.dart';
+import 'login_form_view.dart';
 
 class LoginView extends StatelessWidget {
   const LoginView({super.key});
@@ -28,37 +29,45 @@ class _LoginBody extends StatefulWidget {
 class _LoginBodyState extends State<_LoginBody> {
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  final _formKey = GlobalKey<FormState>();
-  final _usernameCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  bool _showPasswordForm = false;
+  final _emailCtrl = TextEditingController();
+  bool _startingUp = false;
 
   @override
   void dispose() {
-    _usernameCtrl.dispose();
-    _passwordCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _submit(LoginViewModel vm) async {
+  void _openSignIn() {
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
-    final success = await vm.login(username: _usernameCtrl.text.trim(), password: _passwordCtrl.text);
-    if (success && mounted) {
-      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-    }
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginFormView()));
   }
 
-  Future<void> _submitGoogle(LoginViewModel vm) async {
+  Future<void> _getStarted(LoginViewModel vm) async {
     FocusScope.of(context).unfocus();
-    final success = await vm.loginWithGoogle();
-    if (success && mounted) {
-      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-    } else if (!success && mounted && vm.errorMessage != null) {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty || !_emailRegex.hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(vm.errorMessage!), behavior: SnackBarBehavior.floating),
+        const SnackBar(content: Text('Enter a valid email to get started'), behavior: SnackBarBehavior.floating),
       );
+      return;
     }
+    setState(() => _startingUp = true);
+    await vm.continueWithEmail(email);
+    if (!mounted) return;
+    setState(() => _startingUp = false);
+    Navigator.of(context).pushReplacementNamed(AppRoutes.signup);
+  }
+
+  Future<void> _continueAsGuest(LoginViewModel vm) async {
+    FocusScope.of(context).unfocus();
+    await vm.continueAsGuest();
+    if (mounted) _navigateAfterAuth();
+  }
+
+  void _navigateAfterAuth() {
+    final hasBusiness = context.read<WorkspaceRepository>().business != null;
+    Navigator.of(context).pushReplacementNamed(hasBusiness ? AppRoutes.home : AppRoutes.signup);
   }
 
   @override
@@ -113,61 +122,35 @@ class _LoginBodyState extends State<_LoginBody> {
                     ],
                   ),
                   const SizedBox(height: 56),
-                  Text('PERSONAL AI · FOR YOUR BUSINESS', style: AppFonts.mono(size: 10.5, color: AppColors.chromeTx, letterSpacing: 2)),
+                  Text('PERSONAL AI · WITH RECEIPTS', style: AppFonts.mono(size: 10.5, color: AppColors.chromeTx, letterSpacing: 2)),
                   const SizedBox(height: 12),
                   Text(
-                    'Your customers,\nanswered instantly.',
+                    'Your paperwork,\nhandled.',
                     style: AppFonts.display(size: 30, weight: FontWeight.w800, color: Colors.white, letterSpacing: -0.6).copyWith(height: 1.15),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Sign in to manage your AI agent, bookings and documents — tailored to your business.',
+                    'Sign in to keep your documents, answers and voice history on your device — private to you.',
                     style: AppFonts.body(size: 14.5, color: AppColors.chromeTx).copyWith(height: 1.5),
                   ),
                   const SizedBox(height: 22),
-                  _feature(Icons.calendar_month_outlined, 'Every booking, taken and tracked automatically'),
+                  _feature(Icons.shield_outlined, 'Answers from your own documents, with the source named'),
                   const SizedBox(height: 11),
-                  _feature(Icons.forum_outlined, 'Answers your customers from your own documents'),
+                  _feature(Icons.mic_none_outlined, 'Ask by voice or chat, in English, हिंदी or मराठी'),
                   const SizedBox(height: 11),
-                  _feature(Icons.insights_outlined, 'Usage, plan and performance in one dashboard'),
+                  _feature(Icons.vpn_key_outlined, 'Your data stays on this device'),
                   const SizedBox(height: 40),
-                  if (vm.errorMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.06),
-                        border: Border.all(color: AppColors.danger.withOpacity(0.4)),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(vm.errorMessage!, style: AppFonts.body(size: 12.5, color: Colors.white)),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFDADCE0)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
                       ),
-                      onPressed: vm.isLoading ? null : () => _submitGoogle(vm),
-                      child: vm.isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2.2, color: Color(0xFF3C4043)),
-                            )
-                          : const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                GoogleLogo(size: 19),
-                                SizedBox(width: 11),
-                                Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15.5, color: Color(0xFF1f2937))),
-                              ],
-                            ),
+                      onPressed: _openSignIn,
+                      child: const Text('Sign in', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5)),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -182,67 +165,49 @@ class _LoginBodyState extends State<_LoginBody> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  if (!_showPasswordForm)
-                    TextButton(
-                      onPressed: () => setState(() => _showPasswordForm = true),
-                      child: Text('Sign in with email', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.chromeTx)),
-                    )
-                  else
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _field(
-                            controller: _usernameCtrl,
-                            hint: 'you@company.com',
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (v) {
-                              final value = v?.trim() ?? '';
-                              if (value.isEmpty) return 'Enter your email';
-                              if (!_emailRegex.hasMatch(value)) return 'Enter a valid email';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _field(
-                            controller: _passwordCtrl,
-                            hint: 'Password',
-                            obscureText: vm.obscurePassword,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                vm.obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                color: AppColors.chromeTx,
-                                size: 19,
-                              ),
-                              onPressed: vm.toggleObscurePassword,
+                  _field(
+                    controller: _emailCtrl,
+                    hint: 'you@company.com',
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.chromeLine),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                      ),
+                      onPressed: _startingUp ? null : () => _getStarted(vm),
+                      child: _startingUp
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                            )
+                          : Text('Get started', style: AppFonts.body(size: 14.5, weight: FontWeight.w700, color: Colors.white)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: TextButton(
+                      onPressed: vm.isLoading ? null : () => _continueAsGuest(vm),
+                      child: RichText(
+                        text: TextSpan(
+                          style: AppFonts.body(size: 13, color: AppColors.chromeTx),
+                          children: [
+                            const TextSpan(text: 'Just '),
+                            TextSpan(
+                              text: 'explore as a guest',
+                              style: AppFonts.body(size: 13, weight: FontWeight.w700, color: AppColors.accent2),
                             ),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return 'Enter your password';
-                              if (v.length < 6) return 'Must be at least 6 characters';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 14),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accent,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-                            ),
-                            onPressed: vm.isLoading ? null : () => _submit(vm),
-                            child: vm.isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                                  )
-                                : const Text('Continue', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                          ),
-                        ],
+                            const TextSpan(text: ' →'),
+                          ],
+                        ),
                       ),
                     ),
+                  ),
                   const SizedBox(height: 22),
                   Text(
                     'By continuing you agree to the Terms and Privacy Policy.',
@@ -287,10 +252,7 @@ class _LoginBodyState extends State<_LoginBody> {
   Widget _field({
     required TextEditingController controller,
     required String hint,
-    bool obscureText = false,
     TextInputType? keyboardType,
-    Widget? suffixIcon,
-    String? Function(String?)? validator,
   }) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
@@ -298,20 +260,16 @@ class _LoginBodyState extends State<_LoginBody> {
     );
     return TextFormField(
       controller: controller,
-      obscureText: obscureText,
       keyboardType: keyboardType,
       style: AppFonts.body(size: 14.5, color: Colors.white),
-      validator: validator,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: AppFonts.body(size: 14.5, color: AppColors.chromeTx.withOpacity(0.6)),
         filled: true,
         fillColor: Colors.white.withOpacity(0.06),
-        suffixIcon: suffixIcon,
         border: border,
         enabledBorder: border,
         focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent2)),
-        errorBorder: border.copyWith(borderSide: const BorderSide(color: Colors.redAccent)),
       ),
     );
   }
