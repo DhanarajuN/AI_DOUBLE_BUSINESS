@@ -1,0 +1,92 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'app_logger.dart';
+
+class ApiException implements Exception {
+  final int statusCode;
+  final String message;
+  const ApiException(this.statusCode, this.message);
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
+}
+
+class ApiClient {
+  final String baseUrl;
+  final String? tenant;
+  final http.Client _client;
+  String? _accessToken;
+
+  ApiClient({required this.baseUrl, this.tenant, http.Client? client}) : _client = client ?? http.Client();
+
+  void setAccessToken(String? token) {
+    _accessToken = token;
+  }
+
+  Future<dynamic> get(String path, {Map<String, String>? query}) {
+    return _request('GET', path, () => _client.get(_uri(path, query), headers: _headers()));
+  }
+
+  Future<dynamic> post(String path, {Object? body, Map<String, String>? query}) {
+    return _request(
+      'POST',
+      path,
+      () => _client.post(_uri(path, query), headers: _headers(), body: _encode(body)),
+      body: body,
+    );
+  }
+
+  Future<dynamic> put(String path, {Object? body}) {
+    return _request('PUT', path, () => _client.put(_uri(path), headers: _headers(), body: _encode(body)), body: body);
+  }
+
+  Future<dynamic> _request(String method, String path, Future<http.Response> Function() send, {Object? body}) async {
+    final stopwatch = Stopwatch()..start();
+    AppLogger.i('ApiClient', '$method $path${body == null ? '' : ' body=${jsonEncode(redactJson(body))}'}');
+    try {
+      final response = await send();
+      final result = _decode(response);
+      AppLogger.i('ApiClient', '$method $path -> ${response.statusCode} in ${stopwatch.elapsedMilliseconds}ms');
+      return result;
+    } catch (e) {
+      AppLogger.e('ApiClient', '$method $path failed after ${stopwatch.elapsedMilliseconds}ms', e);
+      rethrow;
+    }
+  }
+
+  Uri _uri(String path, [Map<String, String>? query]) {
+    final uri = Uri.parse('$baseUrl$path');
+    return query == null ? uri : uri.replace(queryParameters: query);
+  }
+
+  String? _encode(Object? body) => body == null ? null : jsonEncode(body);
+
+  Map<String, String> _headers() => {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (tenant != null) 'X-Tenant': tenant!,
+        if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+      };
+
+  dynamic _decode(http.Response response) {
+    final status = response.statusCode;
+    final body = response.body.isEmpty ? null : jsonDecode(response.body);
+    if (status < 200 || status >= 300) {
+      String? stringField(String key) => body is Map && body[key] is String ? body[key] as String : null;
+      String? listField(String key) => body is Map && body[key] is List
+          ? (body[key] as List).map((e) => e.toString()).join(', ')
+          : null;
+      final serverMessage = stringField('msg') ?? stringField('message') ?? listField('messages');
+      final reason = response.reasonPhrase;
+      final message = (serverMessage != null && serverMessage.isNotEmpty)
+          ? serverMessage
+          : (reason != null && reason.isNotEmpty)
+              ? reason
+              : 'Request failed with status $status';
+      throw ApiException(status, message);
+    }
+    return body;
+  }
+
+  void close() => _client.close();
+}

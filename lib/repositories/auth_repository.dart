@@ -1,0 +1,158 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import '../constants/server_urls.dart';
+import '../models/user.dart';
+import '../services/api_client.dart';
+import '../services/app_logger.dart';
+import '../services/session_storage.dart';
+
+enum AuthStatus { unknown, authenticated, unauthenticated }
+
+class AuthRepository extends ChangeNotifier {
+  final ApiClient _apiClient;
+  final SessionStorage _sessionStorage;
+
+  AuthRepository(this._apiClient, this._sessionStorage);
+
+  AuthStatus _status = AuthStatus.unknown;
+  User? _currentUser;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  AuthStatus get status => _status;
+  User? get currentUser => _currentUser;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+
+  Future<void> restoreSession() async {
+    final session = await _sessionStorage.readSession();
+    if (session == null) {
+      _status = AuthStatus.unauthenticated;
+    } else {
+      _apiClient.setAccessToken(session.accessToken);
+      _currentUser = session.user;
+      _status = AuthStatus.authenticated;
+    }
+    notifyListeners();
+  }
+
+  Future<bool> login({required String username, required String password}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final json = await _apiClient.post(ServerUrls.login, body: {
+        'username': username,
+        'password': password,
+      }) as Map<String, dynamic>;
+
+      await _completeLogin(
+        accessToken: json['accessToken'] as String,
+        token: json['token'] as String,
+        userId: json['userId'] as String,
+        name: json['Name'] as String,
+        username: json['username'] as String,
+        roleName: json['accRoleName'] as String,
+      );
+      AppLogger.i('AuthRepository', 'login succeeded for $username');
+      return true;
+    } on ApiException catch (e) {
+      AppLogger.w('AuthRepository', 'login failed for $username: ${e.message}');
+      _errorMessage = e.message;
+      return false;
+    } catch (e, st) {
+      AppLogger.e('AuthRepository', 'login failed for $username', e, st);
+      _errorMessage = 'Could not reach the server. Check your connection and try again.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> loginWithGoogle() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final authUrl = Uri.parse('${ServerUrls.baseUrl}${ServerUrls.ssoGoogleLogin}').replace(queryParameters: {
+        'tenantName': ServerUrls.tenant,
+        'redirectUrl': ServerUrls.ssoCallbackUrl,
+      });
+
+      final callback = await FlutterWebAuth2.authenticate(
+        url: authUrl.toString(),
+        callbackUrlScheme: ServerUrls.ssoCallbackScheme,
+      );
+      final callbackUri = Uri.parse(callback);
+
+      final error = callbackUri.queryParameters['error'];
+      if (error != null) {
+        AppLogger.w('AuthRepository', 'Google sign-in returned an error: $error');
+        _errorMessage = callbackUri.queryParameters['error_description'] ?? 'Google sign-in failed.';
+        return false;
+      }
+      final sessionId = callbackUri.queryParameters['sessionId'];
+      if (sessionId == null) {
+        AppLogger.w('AuthRepository', 'Google sign-in callback had no sessionId');
+        _errorMessage = 'Google sign-in did not return a session.';
+        return false;
+      }
+
+      final json = await _apiClient.post(
+        ServerUrls.ssoSessionLogin,
+        query: {'sessionId': sessionId},
+      ) as Map<String, dynamic>;
+
+      await _completeLogin(
+        accessToken: json['token'] as String,
+        token: json['token'] as String,
+        userId: json['accountUserId'] as String,
+        name: json['Name'] as String,
+        username: json['username'] as String,
+        roleName: json['accRoleName'] as String,
+      );
+      AppLogger.i('AuthRepository', 'Google sign-in succeeded');
+      return true;
+    } on PlatformException catch (e) {
+      AppLogger.i('AuthRepository', 'Google sign-in cancelled: ${e.code}');
+      return false;
+    } on ApiException catch (e) {
+      AppLogger.w('AuthRepository', 'Google sign-in token exchange failed: ${e.message}');
+      _errorMessage = e.message;
+      return false;
+    } catch (e, st) {
+      AppLogger.e('AuthRepository', 'Google sign-in failed unexpectedly', e, st);
+      _errorMessage = 'Could not complete Google sign-in. Please try again.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _completeLogin({
+    required String accessToken,
+    required String token,
+    required String userId,
+    required String name,
+    required String username,
+    required String roleName,
+  }) async {
+    final user = User(id: userId, name: name, username: username, roleName: roleName);
+    await _sessionStorage.saveSession(accessToken: accessToken, token: token, user: user);
+    _apiClient.setAccessToken(accessToken);
+    _currentUser = user;
+    _status = AuthStatus.authenticated;
+  }
+
+  Future<void> logout() async {
+    AppLogger.i('AuthRepository', 'logout');
+    await _sessionStorage.clearSession();
+    _apiClient.setAccessToken(null);
+    _currentUser = null;
+    _status = AuthStatus.unauthenticated;
+    notifyListeners();
+  }
+}

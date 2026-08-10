@@ -1,0 +1,27 @@
+name: ai_double_business
+description: AI Double Business - business/professional companion app
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+  google_fonts: ^6.2.1
+  http: ^1.2.2
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.5
+  file_picker: ^8.3.2
+  flutter_web_auth_2: ^4.1.0
+  flutter_markdown_plus: ^1.0.0+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
