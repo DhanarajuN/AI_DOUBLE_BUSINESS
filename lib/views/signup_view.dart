@@ -8,6 +8,7 @@ import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/signup_view_model.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/business_icons.dart';
 
 class SignupView extends StatelessWidget {
@@ -79,13 +80,7 @@ class _SignupBodyState extends State<_SignupBody> {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: const BoxDecoration(color: AppColors.chrome, shape: BoxShape.circle),
-                    alignment: Alignment.center,
-                    child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
-                  ),
+                  const AppLogoMark(size: 22),
                   const SizedBox(width: 9),
                   RichText(
                     text: TextSpan(

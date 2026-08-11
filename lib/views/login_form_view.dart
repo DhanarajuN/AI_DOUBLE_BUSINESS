@@ -6,6 +6,7 @@ import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/login_view_model.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/google_logo.dart';
 
 /// The "Sign in to continue" form screen — reached from the chrome landing
@@ -97,18 +98,7 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 76,
-                      height: 76,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [AppColors.accent, AppColors.accent2]),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 34),
-                    ),
-                  ),
+                  const Center(child: AppLogoMark(size: 76)),
                   const SizedBox(height: 20),
                   Center(
                     child: RichText(

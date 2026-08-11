@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../repositories/workspace_repository.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/assistant_view_model.dart';
+import '../widgets/app_logo.dart';
 import 'account_view.dart';
 
 class AssistantView extends StatelessWidget {
@@ -75,13 +76,7 @@ class _AssistantBodyState extends State<_AssistantBody> {
               decoration: BoxDecoration(color: AppColors.card, border: Border(bottom: BorderSide(color: AppColors.line))),
               child: Row(
                 children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: const BoxDecoration(color: AppColors.chrome, shape: BoxShape.circle),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.auto_awesome_outlined, color: Colors.white, size: 18),
-                  ),
+                  const AppLogoMark(size: 38),
                   const SizedBox(width: 11),
                   Expanded(
                     child: Column(

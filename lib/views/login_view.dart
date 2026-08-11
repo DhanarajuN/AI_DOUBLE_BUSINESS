@@ -5,6 +5,7 @@ import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/login_view_model.dart';
+import '../widgets/app_logo.dart';
 import 'login_form_view.dart';
 
 class LoginView extends StatelessWidget {
@@ -98,17 +99,7 @@ class _LoginBodyState extends State<_LoginBody> {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 26,
-                        height: 26,
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                        alignment: Alignment.center,
-                        child: Container(
-                          width: 9,
-                          height: 9,
-                          decoration: const BoxDecoration(color: AppColors.chrome, shape: BoxShape.circle),
-                        ),
-                      ),
+                      const AppLogoMark(size: 26),
                       const SizedBox(width: 10),
                       RichText(
                         text: TextSpan(

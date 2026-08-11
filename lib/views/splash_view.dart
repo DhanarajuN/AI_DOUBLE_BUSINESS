@@ -4,6 +4,7 @@ import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_logo.dart';
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
@@ -46,17 +47,7 @@ class _SplashViewState extends State<SplashView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 60,
-              height: 60,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: const BoxDecoration(color: AppColors.chrome, shape: BoxShape.circle),
-              ),
-            ),
+            const AppLogoMark(size: 60),
             const SizedBox(height: 20),
             RichText(
               text: TextSpan(
