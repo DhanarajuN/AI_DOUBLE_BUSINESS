@@ -41,7 +41,9 @@ class AppLogger {
 
   static Future<void> init() async {
     try {
-      final dir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+      final dir = (!kIsWeb && Platform.isAndroid)
+          ? (await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory())
+          : await getApplicationDocumentsDirectory();
       _file = File('${dir.path}/$_fileName');
       if (!await _file!.exists()) {
         await _file!.create(recursive: true);

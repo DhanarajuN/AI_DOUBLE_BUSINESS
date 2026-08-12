@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../repositories/auth_repository.dart';
-import '../repositories/workspace_repository.dart';
-import '../routes/app_routes.dart';
+// import '../repositories/workspace_repository.dart';
+// import '../routes/app_routes.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/login_view_model.dart';
 import '../widgets/app_logo.dart';
-import 'login_form_view.dart';
+import '../widgets/toast.dart';
+// import 'login_form_view.dart';
 
 class LoginView extends StatelessWidget {
   const LoginView({super.key});
@@ -28,10 +29,10 @@ class _LoginBody extends StatefulWidget {
 }
 
 class _LoginBodyState extends State<_LoginBody> {
-  static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  // static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   final _emailCtrl = TextEditingController();
-  bool _startingUp = false;
+  final _startingUp = false;
 
   @override
   void dispose() {
@@ -39,37 +40,37 @@ class _LoginBodyState extends State<_LoginBody> {
     super.dispose();
   }
 
-  void _openSignIn() {
-    FocusScope.of(context).unfocus();
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginFormView()));
-  }
+  // void _openSignIn() {
+  //   FocusScope.of(context).unfocus();
+  //   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginFormView()));
+  // }
 
-  Future<void> _getStarted(LoginViewModel vm) async {
-    FocusScope.of(context).unfocus();
-    final email = _emailCtrl.text.trim();
-    if (email.isEmpty || !_emailRegex.hasMatch(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid email to get started'), behavior: SnackBarBehavior.floating),
-      );
-      return;
-    }
-    setState(() => _startingUp = true);
-    await vm.continueWithEmail(email);
-    if (!mounted) return;
-    setState(() => _startingUp = false);
-    Navigator.of(context).pushReplacementNamed(AppRoutes.signup);
-  }
+  // Future<void> _getStarted(LoginViewModel vm) async {
+  //   FocusScope.of(context).unfocus();
+  //   final email = _emailCtrl.text.trim();
+  //   if (email.isEmpty || !_emailRegex.hasMatch(email)) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('Enter a valid email to get started'), behavior: SnackBarBehavior.floating),
+  //     );
+  //     return;
+  //   }
+  //   setState(() => _startingUp = true);
+  //   await vm.continueWithEmail(email);
+  //   if (!mounted) return;
+  //   setState(() => _startingUp = false);
+  //   Navigator.of(context).pushReplacementNamed(AppRoutes.signup);
+  // }
 
-  Future<void> _continueAsGuest(LoginViewModel vm) async {
-    FocusScope.of(context).unfocus();
-    await vm.continueAsGuest();
-    if (mounted) _navigateAfterAuth();
-  }
+  // Future<void> _continueAsGuest(LoginViewModel vm) async {
+  //   FocusScope.of(context).unfocus();
+  //   await vm.continueAsGuest();
+  //   if (mounted) _navigateAfterAuth();
+  // }
 
-  void _navigateAfterAuth() {
-    final hasBusiness = context.read<WorkspaceRepository>().business != null;
-    Navigator.of(context).pushReplacementNamed(hasBusiness ? AppRoutes.home : AppRoutes.signup);
-  }
+  // void _navigateAfterAuth() {
+  //   final hasBusiness = context.read<WorkspaceRepository>().business != null;
+  //   Navigator.of(context).pushReplacementNamed(hasBusiness ? AppRoutes.home : AppRoutes.signup);
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +141,8 @@ class _LoginBodyState extends State<_LoginBody> {
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
                       ),
-                      onPressed: _openSignIn,
+                     // onPressed: _openSignIn,
+                      onPressed: () => Toast.show(context, 'Coming soon', duration: const Duration(seconds: 3)),
                       child: const Text('Sign in', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5)),
                     ),
                   ),
@@ -170,7 +172,9 @@ class _LoginBodyState extends State<_LoginBody> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
                       ),
-                      onPressed: _startingUp ? null : () => _getStarted(vm),
+                      onPressed: _startingUp
+                          ? null
+                          : () => Toast.show(context, 'Coming soon', duration: const Duration(seconds: 3)),
                       child: _startingUp
                           ? const SizedBox(
                               width: 20,
@@ -183,7 +187,8 @@ class _LoginBodyState extends State<_LoginBody> {
                   const SizedBox(height: 16),
                   Center(
                     child: TextButton(
-                      onPressed: vm.isLoading ? null : () => _continueAsGuest(vm),
+                      onPressed: vm.isLoading ? null : () => Toast.show(context, 'Coming soon', duration: const Duration(seconds: 3)),
+                      //_continueAsGuest(vm),
                       child: RichText(
                         text: TextSpan(
                           style: AppFonts.body(size: 13, color: AppColors.chromeTx),
