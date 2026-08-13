@@ -9,9 +9,6 @@ import '../viewmodels/login_view_model.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/google_logo.dart';
 
-/// The "Sign in to continue" form screen — reached from the chrome landing
-/// page's Sign in button. Username/password + Google, matching the design
-/// reference exactly.
 class LoginFormView extends StatelessWidget {
   const LoginFormView({super.key});
 
@@ -56,7 +53,7 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     if (!_formKey.currentState!.validate()) return;
     final success = await vm.login(username: _usernameCtrl.text.trim(), password: _passwordCtrl.text);
     if (success && mounted) {
-      _navigateAfterAuth();
+      await _navigateAfterAuth();
     }
   }
 
@@ -64,7 +61,7 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     FocusScope.of(context).unfocus();
     final success = await vm.loginWithGoogle();
     if (success && mounted) {
-      _navigateAfterAuth();
+      await _navigateAfterAuth();
     } else if (!success && mounted && vm.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(vm.errorMessage!), behavior: SnackBarBehavior.floating),
@@ -72,7 +69,10 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     }
   }
 
-  void _navigateAfterAuth() {
+  Future<void> _navigateAfterAuth() async {
+    final identity = context.read<AuthRepository>().currentUser?.username ?? '';
+    await context.read<WorkspaceRepository>().ensureBusinessBelongsTo(identity);
+    if (!mounted) return;
     final hasBusiness = context.read<WorkspaceRepository>().business != null;
     Navigator.of(context).pushReplacementNamed(hasBusiness ? AppRoutes.home : AppRoutes.signup);
   }

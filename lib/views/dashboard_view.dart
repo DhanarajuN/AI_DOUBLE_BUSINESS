@@ -349,7 +349,7 @@ class _DashboardBody extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
-      childAspectRatio: 1.7,
+      childAspectRatio: 1.5,
       children: [
         _kpi(Icons.calendar_month_outlined, fmtN(bookings), 'Bookings', AppColors.accent, AppColors.accentSoft, () => _goTab(context, 1)),
         _kpi(Icons.bar_chart_outlined, fmtTok(tokens), 'AI tokens used', AppColors.ok, const Color(0x190E8A5F), null),
@@ -364,22 +364,23 @@ class _DashboardBody extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.line)),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(9)),
               alignment: Alignment.center,
-              child: Icon(icon, size: 17, color: color),
+              child: Icon(icon, size: 16, color: color),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(value, style: AppFonts.display(size: 19), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+            Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3), maxLines: 1, overflow: TextOverflow.ellipsis),
           ],
         ),
       ),

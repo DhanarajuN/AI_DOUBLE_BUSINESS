@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../repositories/workspace_repository.dart';
 import '../theme/app_theme.dart';
 import 'account_view.dart';
 import 'assistant_view.dart';
@@ -36,6 +38,7 @@ class _HomeShellViewState extends State<HomeShellView> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<WorkspaceRepository>();
     return Scaffold(
       backgroundColor: AppColors.paper2,
       body: IndexedStack(index: _index, children: _pages),

@@ -67,10 +67,24 @@ class _SignupBodyState extends State<_SignupBody> {
     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
   }
 
+  void _handleBack(SignupViewModel vm) {
+    if (vm.step == 2) {
+      vm.goToStep1();
+    } else {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<SignupViewModel>();
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        _handleBack(vm);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.paper2,
       body: SafeArea(
         child: SingleChildScrollView(
@@ -106,6 +120,7 @@ class _SignupBodyState extends State<_SignupBody> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

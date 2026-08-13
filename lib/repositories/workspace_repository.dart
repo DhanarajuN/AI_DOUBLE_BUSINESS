@@ -99,6 +99,14 @@ class WorkspaceRepository extends ChangeNotifier {
     return BookingStatus.noshow;
   }
 
+  Future<void> ensureBusinessBelongsTo(String identity) async {
+    if (business != null && business!.email != identity) {
+      business = null;
+      await _prefs?.remove('biz');
+      notifyListeners();
+    }
+  }
+
   Future<void> completeSignup({
     required String name,
     required String owner,
