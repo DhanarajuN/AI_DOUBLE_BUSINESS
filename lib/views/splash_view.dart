@@ -30,11 +30,17 @@ class _SplashViewState extends State<SplashView> {
     ]);
     if (!mounted) return;
     final loggedIn = authRepository.status == AuthStatus.authenticated;
+    final isGuestSession = authRepository.currentUser?.roleName == 'guest';
     if (!loggedIn) {
       Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-    } else if (workspace.business == null) {
+    } else if (workspace.business == null && isGuestSession) {
       Navigator.of(context).pushReplacementNamed(AppRoutes.signup);
     } else {
+      if (workspace.business == null) {
+        final user = authRepository.currentUser;
+        await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: user?.username ?? '');
+        if (!mounted) return;
+      }
       Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     }
   }

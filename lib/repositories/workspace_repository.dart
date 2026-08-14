@@ -107,6 +107,19 @@ class WorkspaceRepository extends ChangeNotifier {
     }
   }
 
+  Future<void> ensureDefaultBusiness({required String name, required String owner, required String email}) async {
+    if (business != null) return;
+    await completeSignup(
+      name: name,
+      owner: owner,
+      email: email,
+      industryId: kIndustries.first.id,
+      size: kTeamSizes.first,
+      planId: 'growth',
+      region: 'in',
+    );
+  }
+
   Future<void> completeSignup({
     required String name,
     required String owner,

@@ -70,11 +70,13 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
   }
 
   Future<void> _navigateAfterAuth() async {
-    final identity = context.read<AuthRepository>().currentUser?.username ?? '';
-    await context.read<WorkspaceRepository>().ensureBusinessBelongsTo(identity);
+    final user = context.read<AuthRepository>().currentUser;
+    final identity = user?.username ?? '';
+    final workspace = context.read<WorkspaceRepository>();
+    await workspace.ensureBusinessBelongsTo(identity);
+    await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: identity);
     if (!mounted) return;
-    final hasBusiness = context.read<WorkspaceRepository>().business != null;
-    Navigator.of(context).pushReplacementNamed(hasBusiness ? AppRoutes.home : AppRoutes.signup);
+    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
   }
 
   void _register() {
@@ -89,7 +91,9 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     return Scaffold(
       backgroundColor: AppColors.paper2,
       body: SafeArea(
-        child: Center(
+        child: Stack(
+          children: [
+            Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
             child: Form(
@@ -234,6 +238,21 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
               ),
             ),
           ),
+            ),
+            if (vm.isLoading)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: AppColors.paper2.withOpacity(0.85),
+                  child: Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.6, color: AppColors.accent),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
