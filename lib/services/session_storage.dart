@@ -5,7 +5,8 @@ class AuthSession {
   final String accessToken;
   final String token;
   final User user;
-  const AuthSession({required this.accessToken, required this.token, required this.user});
+  const AuthSession(
+      {required this.accessToken, required this.token, required this.user});
 }
 
 class SessionStorage {
@@ -15,6 +16,7 @@ class SessionStorage {
   static const _nameKey = 'auth_name';
   static const _usernameKey = 'auth_username';
   static const _roleNameKey = 'auth_role_name';
+  static const _businessIdKey = 'gosure_business_id';
 
   Future<String?> readAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -39,17 +41,26 @@ class SessionStorage {
     final name = prefs.getString(_nameKey);
     final username = prefs.getString(_usernameKey);
     final roleName = prefs.getString(_roleNameKey);
-    if (accessToken == null || token == null || userId == null || name == null || username == null || roleName == null) {
+    if (accessToken == null ||
+        token == null ||
+        userId == null ||
+        name == null ||
+        username == null ||
+        roleName == null) {
       return null;
     }
     return AuthSession(
       accessToken: accessToken,
       token: token,
-      user: User(id: userId, name: name, username: username, roleName: roleName),
+      user:
+          User(id: userId, name: name, username: username, roleName: roleName),
     );
   }
 
-  Future<void> saveSession({required String accessToken, required String token, required User user}) async {
+  Future<void> saveSession(
+      {required String accessToken,
+      required String token,
+      required User user}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_accessTokenKey, accessToken);
     await prefs.setString(_tokenKey, token);
@@ -67,5 +78,34 @@ class SessionStorage {
     await prefs.remove(_nameKey);
     await prefs.remove(_usernameKey);
     await prefs.remove(_roleNameKey);
+  }
+
+  // Placeholder seam for "which business is this signed-in user managing" — nothing else in
+  // this app resolves a businessId yet (see AI_DOUBLE_BUSINESS business-conversations feature).
+  // Swap this for a real source (derived from the authenticated user, a business profile picked
+  // at signup, etc.) once one exists; until then it's set once via a small in-app prompt.
+  Future<String?> readBusinessId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_businessIdKey);
+  }
+
+  Future<void> saveBusinessId(String businessId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_businessIdKey, businessId);
+  }
+
+  // How many messages this device had already seen in a conversation as of the last
+  // time it was opened — compared against the list endpoint's live messageCount to
+  // show a "N new" badge, the same way an unread-count badge works in any chat app.
+  static const _readCountPrefix = 'gosure_read_count_';
+
+  Future<int> readLastSeenCount(String conversationId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('$_readCountPrefix$conversationId') ?? 0;
+  }
+
+  Future<void> saveLastSeenCount(String conversationId, int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('$_readCountPrefix$conversationId', count);
   }
 }

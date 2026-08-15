@@ -17,39 +17,52 @@ class ApiClient {
   final http.Client _client;
   String? _accessToken;
 
-  ApiClient({required this.baseUrl, this.tenant, http.Client? client}) : _client = client ?? http.Client();
+  ApiClient({required this.baseUrl, this.tenant, http.Client? client})
+      : _client = client ?? http.Client();
 
   void setAccessToken(String? token) {
     _accessToken = token;
   }
 
+  String? get accessToken => _accessToken;
+
   Future<dynamic> get(String path, {Map<String, String>? query}) {
-    return _request('GET', path, () => _client.get(_uri(path, query), headers: _headers()));
+    return _request(
+        'GET', path, () => _client.get(_uri(path, query), headers: _headers()));
   }
 
-  Future<dynamic> post(String path, {Object? body, Map<String, String>? query}) {
+  Future<dynamic> post(String path,
+      {Object? body, Map<String, String>? query}) {
     return _request(
       'POST',
       path,
-      () => _client.post(_uri(path, query), headers: _headers(), body: _encode(body)),
+      () => _client.post(_uri(path, query),
+          headers: _headers(), body: _encode(body)),
       body: body,
     );
   }
 
   Future<dynamic> put(String path, {Object? body}) {
-    return _request('PUT', path, () => _client.put(_uri(path), headers: _headers(), body: _encode(body)), body: body);
+    return _request('PUT', path,
+        () => _client.put(_uri(path), headers: _headers(), body: _encode(body)),
+        body: body);
   }
 
-  Future<dynamic> _request(String method, String path, Future<http.Response> Function() send, {Object? body}) async {
+  Future<dynamic> _request(
+      String method, String path, Future<http.Response> Function() send,
+      {Object? body}) async {
     final stopwatch = Stopwatch()..start();
-    AppLogger.i('ApiClient', '$method $path${body == null ? '' : ' body=${jsonEncode(redactJson(body))}'}');
+    AppLogger.i('ApiClient',
+        '$method $path${body == null ? '' : ' body=${jsonEncode(redactJson(body))}'}');
     try {
       final response = await send();
       final result = _decode(response);
-      AppLogger.i('ApiClient', '$method $path -> ${response.statusCode} in ${stopwatch.elapsedMilliseconds}ms');
+      AppLogger.i('ApiClient',
+          '$method $path -> ${response.statusCode} in ${stopwatch.elapsedMilliseconds}ms');
       return result;
     } catch (e) {
-      AppLogger.e('ApiClient', '$method $path failed after ${stopwatch.elapsedMilliseconds}ms', e);
+      AppLogger.e('ApiClient',
+          '$method $path failed after ${stopwatch.elapsedMilliseconds}ms', e);
       rethrow;
     }
   }
@@ -72,11 +85,13 @@ class ApiClient {
     final status = response.statusCode;
     final body = response.body.isEmpty ? null : jsonDecode(response.body);
     if (status < 200 || status >= 300) {
-      String? stringField(String key) => body is Map && body[key] is String ? body[key] as String : null;
+      String? stringField(String key) =>
+          body is Map && body[key] is String ? body[key] as String : null;
       String? listField(String key) => body is Map && body[key] is List
           ? (body[key] as List).map((e) => e.toString()).join(', ')
           : null;
-      final serverMessage = stringField('msg') ?? stringField('message') ?? listField('messages');
+      final serverMessage =
+          stringField('msg') ?? stringField('message') ?? listField('messages');
       final reason = response.reasonPhrase;
       final message = (serverMessage != null && serverMessage.isNotEmpty)
           ? serverMessage

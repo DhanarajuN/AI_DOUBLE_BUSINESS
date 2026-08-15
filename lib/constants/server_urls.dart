@@ -16,4 +16,16 @@ class ServerUrls {
   static const String ssoGoogleLogin = '/api/v1/sso/Google/login';
 
   static const String ssoSessionLogin = '/api/v1/users/sso/session-login';
+
+  static const String librechatURL = String.fromEnvironment(
+    'LIBRECHAT_URL',
+    defaultValue: 'https://librechat-backend-olj53mb3da-el.a.run.app',
+  );
+
+  static const String coreMcpUrl = String.fromEnvironment(
+    'CORE_MCP_URL',
+    defaultValue: 'https://dev.gosure.ai',
+  );
+
+  static const String gosureConvos = '/api/gosure/convos';
 }

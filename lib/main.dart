@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'constants/app_constants.dart';
 import 'constants/server_urls.dart';
 import 'repositories/auth_repository.dart';
+import 'repositories/business_conversations_repository.dart';
 import 'repositories/workspace_repository.dart';
 import 'routes/app_routes.dart';
 import 'services/api_client.dart';
@@ -19,7 +20,8 @@ void main() {
     await AppLogger.init();
 
     FlutterError.onError = (details) {
-      AppLogger.e('FlutterError', details.exceptionAsString(), details.exception, details.stack);
+      AppLogger.e('FlutterError', details.exceptionAsString(),
+          details.exception, details.stack);
       FlutterError.presentError(details);
     };
     PlatformDispatcher.instance.onError = (error, stack) {
@@ -40,15 +42,18 @@ class AiDoubleBusinessApp extends StatefulWidget {
   State<AiDoubleBusinessApp> createState() => _AiDoubleBusinessAppState();
 }
 
-class _AiDoubleBusinessAppState extends State<AiDoubleBusinessApp> with WidgetsBindingObserver {
-  Brightness _systemBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+class _AiDoubleBusinessAppState extends State<AiDoubleBusinessApp>
+    with WidgetsBindingObserver {
+  Brightness _systemBrightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
   Timer? _brightnessPoll;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _brightnessPoll = Timer.periodic(const Duration(seconds: 1), (_) => _checkBrightness());
+    _brightnessPoll =
+        Timer.periodic(const Duration(seconds: 1), (_) => _checkBrightness());
   }
 
   @override
@@ -59,7 +64,8 @@ class _AiDoubleBusinessAppState extends State<AiDoubleBusinessApp> with WidgetsB
   }
 
   void _checkBrightness() {
-    final current = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final current =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
     if (current != _systemBrightness) {
       _systemBrightness = current;
       setState(() {});
@@ -91,14 +97,21 @@ class _AiDoubleBusinessAppState extends State<AiDoubleBusinessApp> with WidgetsB
     return MultiProvider(
       providers: [
         Provider<ApiClient>(
-          create: (_) => ApiClient(baseUrl: ServerUrls.baseUrl, tenant: ServerUrls.tenant),
+          create: (_) =>
+              ApiClient(baseUrl: ServerUrls.baseUrl, tenant: ServerUrls.tenant),
           dispose: (_, client) => client.close(),
         ),
         Provider<SessionStorage>(create: (_) => SessionStorage()),
         ChangeNotifierProvider<AuthRepository>(
-          create: (ctx) => AuthRepository(ctx.read<ApiClient>(), ctx.read<SessionStorage>()),
+          create: (ctx) =>
+              AuthRepository(ctx.read<ApiClient>(), ctx.read<SessionStorage>()),
         ),
-        ChangeNotifierProvider<WorkspaceRepository>(create: (_) => WorkspaceRepository()),
+        ChangeNotifierProvider<WorkspaceRepository>(
+            create: (_) => WorkspaceRepository()),
+        ChangeNotifierProvider<BusinessConversationsRepository>(
+          create: (ctx) =>
+              BusinessConversationsRepository(ctx.read<SessionStorage>()),
+        ),
       ],
       child: Builder(
         builder: (context) {
