@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/gosure_conversation.dart';
 import '../repositories/business_conversations_repository.dart';
@@ -77,10 +76,10 @@ class BusinessConversationsViewModel extends ChangeNotifier {
             _businessId = resolved;
           }
         } catch (e) {
-          // Falls through to the manual-entry prompt — the same Business-list
-          // query the portal's findMyBusiness also uses, and currently blocked
-          // there by the same ongo-core ACL bug (JobWorkflowEngine NPE) for
-          // any signed-in business role, not something to retry here.
+          // Falls through to the manual-entry prompt. Genuinely no account-
+          // to-business link exists yet for this signed-in user in that case
+          // (not an ACL/API failure — confirmed live: the query itself
+          // succeeds cleanly, it just found no match).
           AppLogger.w('BusinessConversationsVM',
               'Could not auto-resolve businessId: $e');
         }
@@ -140,19 +139,24 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     });
   }
 
-  /// Finds the Business this signed-in user's own email is registered
-  /// against — mirrors the portal's JobTypesApi.findMyBusiness exactly (same
-  /// "Work Email" field, same fetchInstances-style filtered query).
+  /// Finds the Business this signed-in user actually registered — matched by
+  /// createdByUsername (the account that created the record), not "Work
+  /// Email". Work Email is a free-text field from the registration form (a
+  /// business's public contact address) and often doesn't match the
+  /// registrant's own login email at all — confirmed against real records,
+  /// e.g. one business's Work Email is a contact address while its
+  /// createdByUsername is the actual account that registered it.
+  /// createdByUsername isn't a `data.*` field, so it can't be server-side
+  /// filtered like Work Email was — fetches the (currently small) full list
+  /// and matches client-side instead, mirroring the portal's own fix for the
+  /// identical mismatch in its /biz ownership check (see cynosure.ts).
   Future<String?> _resolveMyBusinessId(String email) async {
     final wanted = email.trim().toLowerCase();
     if (wanted.isEmpty) return null;
 
-    final filters = jsonEncode([
-      {'fieldName': 'Work Email', 'condition': 'contains', 'value': wanted},
-    ]);
     final result = await _apiClient.get(
       '/api/v1/job-types/name/Business/instances',
-      query: {'pageNumber': '1', 'pageSize': '100', 'filters': filters},
+      query: {'pageNumber': '1', 'pageSize': '200', 'filters': '[]'},
     );
     if (result is! Map<String, dynamic>) return null;
 
@@ -160,9 +164,8 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     if (jobs == null) return null;
     for (final job in jobs) {
       if (job is! Map<String, dynamic>) continue;
-      final data = job['data'];
-      final workEmail = data is Map ? data['Work Email'] : null;
-      if (workEmail is String && workEmail.trim().toLowerCase() == wanted) {
+      final owner = job['createdByUsername'];
+      if (owner is String && owner.trim().toLowerCase() == wanted) {
         return job['id'] as String?;
       }
     }
