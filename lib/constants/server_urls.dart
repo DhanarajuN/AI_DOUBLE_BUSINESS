@@ -26,6 +26,8 @@ class ServerUrls {
   static const String businessInstances =
       '/api/v1/job-types/name/Business/instances';
 
+  static const String jobInstances = '/api/v1/job-instances';
+
   static const String coreMcpConfigurations = '/core-mcp/configurations';
 
   static const String librechatURL = String.fromEnvironment(

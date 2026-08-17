@@ -4,6 +4,7 @@ import '../models/booking.dart';
 import '../models/channel.dart';
 import '../models/plan.dart';
 import '../repositories/workspace_repository.dart';
+import '../services/api_client.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
@@ -58,7 +59,7 @@ class DashboardView extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (ctx) => DashboardViewModel(
-          ctx.read<WorkspaceRepository>(), ctx.read<SessionStorage>()),
+          ctx.read<WorkspaceRepository>(), ctx.read<SessionStorage>(), ctx.read<ApiClient>()),
       child: const _DashboardBody(),
     );
   }
@@ -77,9 +78,12 @@ class _DashboardBody extends StatelessWidget {
     final greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     final data = vm.businessData;
     final heroName = _firstNonEmpty(data, const ['Business Name', 'businessName', 'Company Name', 'Name']) ?? '';
-    final heroOwner = _firstNonEmpty(data, const ['Owner Name', 'ownerName', 'Contact Name', 'Full Name']) ?? '';
+    final heroOwner = _firstNonEmpty(data, const ['Owner Name', 'ownerName', 'Contact Name', 'Full Name']) ??
+        [_firstNonEmpty(data, const ['First Name']), _firstNonEmpty(data, const ['Last Name'])]
+            .whereType<String>()
+            .join(' ');
     final heroCategory = _firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
-    final heroHours = _firstNonEmpty(data, const ['Availability Times', 'availabilityTimes', 'Available Hours'])?.split('(').first.trim();
+    final heroHours = _firstNonEmpty(data, const ['Availabilty Times', 'Availability Times'])?.split('(').first.trim();
     final plan = planById(biz.planId);
     final c = kCurrencies[vm.currency]!;
     final bks = vm.bookings;
@@ -105,7 +109,7 @@ class _DashboardBody extends StatelessWidget {
             children: [
               _hero(heroName, heroOwner, greet, heroCategory, heroHours, plan),
               const SizedBox(height: 14),
-              _kpiGrid(context, bks.length, totalTok, plan, vm.docs.length),
+              _kpiGrid(context, bks.length, totalTok, plan, vm.ordersCount),
               _sectionHeader('Bookings', 'Calendar →', () => _goTab(context, 1)),
               _card(
                 child: Column(
@@ -349,7 +353,7 @@ class _DashboardBody extends StatelessWidget {
         ],
       );
 
-  Widget _kpiGrid(BuildContext context, int bookings, int tokens, Plan plan, int docCount) {
+  Widget _kpiGrid(BuildContext context, int bookings, int tokens, Plan plan, int ordersCount) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -359,9 +363,9 @@ class _DashboardBody extends StatelessWidget {
       childAspectRatio: 1.5,
       children: [
         _kpi(Icons.calendar_month_outlined, fmtN(bookings), 'Bookings', AppColors.accent, AppColors.accentSoft, () => _goTab(context, 1)),
-        _kpi(Icons.bar_chart_outlined, fmtTok(tokens), 'AI tokens used', AppColors.ok, const Color(0x190E8A5F), null),
+        _kpi(Icons.shopping_bag_outlined, fmtN(ordersCount), 'Orders', const Color(0xFF4F46E5), const Color(0x194F46E5), null),
         _kpi(Icons.local_offer_outlined, plan.name, 'Current plan', AppColors.amber, const Color(0x19B45309), () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlansView()))),
-        _kpi(Icons.description_outlined, fmtN(docCount), 'Files uploaded', const Color(0xFF4F46E5), const Color(0x194F46E5), () => _goTab(context, 3)),
+        _kpi(Icons.bar_chart_outlined, fmtTok(tokens), 'AI tokens used', AppColors.ok, const Color(0x190E8A5F), null),
       ],
     );
   }
