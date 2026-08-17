@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../constants/server_urls.dart';
 import '../models/gosure_conversation.dart';
+import '../models/gosure_message.dart';
 import '../repositories/business_conversations_repository.dart';
 import '../services/api_client.dart';
 import '../services/app_logger.dart';
@@ -53,6 +54,57 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     final seen = _seenCounts[convo.conversationId] ?? 0;
     final diff = convo.messageCount - seen;
     return diff > 0 ? diff : 0;
+  }
+
+  // GosureConversation.user is a raw id/email — there's no display name at the
+  // conversation-list level, only on individual messages (senderName, WhatsApp-style,
+  // resolved server-side). Resolved lazily per user group and cached here, since getting
+  // it means fetching one conversation's full history.
+  final Map<String, String> _userDisplayNames = {};
+  final Set<String> _pendingDisplayNameFetches = {};
+  String? displayNameFor(String user) => _userDisplayNames[user];
+
+  Future<void> ensureDisplayName(
+      String user, GosureConversation anyConversation) async {
+    if (_userDisplayNames.containsKey(user) ||
+        _pendingDisplayNameFetches.contains(user) ||
+        _businessId == null) {
+      return;
+    }
+    _pendingDisplayNameFetches.add(user);
+    try {
+      final history = await BusinessChatService.fetchConversationHistory(
+          anyConversation.conversationId, _businessId!);
+      GosureMessage? customerMessage;
+      for (final m in history) {
+        if (m.senderKind == GosureMessageSender.customer &&
+            (m.senderName?.trim().isNotEmpty ?? false)) {
+          customerMessage = m;
+          break;
+        }
+      }
+      final name = _cleanName(customerMessage?.senderName);
+      if (name != null) {
+        _userDisplayNames[user] = name;
+        AppLogger.i('BusinessConversationsVM',
+            'Resolved display name for $user: $name');
+        notifyListeners();
+      }
+    } catch (e) {
+      AppLogger.w('BusinessConversationsVM',
+          'Could not resolve display name for $user: $e');
+    } finally {
+      _pendingDisplayNameFetches.remove(user);
+    }
+  }
+
+  // The SSO server historically stringified a missing last name as the literal word
+  // "null" into the display name — strip that off, same fix as elsewhere it's rendered.
+  String? _cleanName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final cleaned =
+        raw.replaceAll(RegExp(r'\s+null\b', caseSensitive: false), '').trim();
+    return cleaned.isEmpty ? raw.trim() : cleaned;
   }
 
   Future<void> _syncSeenCounts() async {
@@ -209,12 +261,16 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     if (needsBusinessId) return;
     await _repo.loadConversations(_businessId!, refresh: true);
     await _syncSeenCounts();
+    AppLogger.i('BusinessConversationsVM',
+        'Loaded ${conversations.length} conversation(s) for business $_businessId');
   }
 
   Future<void> loadMore() async {
     if (needsBusinessId) return;
     await _repo.loadMoreConversations(_businessId!);
     await _syncSeenCounts();
+    AppLogger.i('BusinessConversationsVM',
+        'Loaded more, now ${conversations.length} conversation(s) for business $_businessId');
   }
 
   @override

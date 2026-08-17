@@ -109,6 +109,53 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
     }
   }
 
+  Widget _modeSwitcher(ConversationDetailViewModel vm, bool agentOn) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppColors.paper2,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _modeSegment(vm, 'AI', Icons.smart_toy_outlined, true, agentOn),
+          _modeSegment(vm, 'You', Icons.person_outline, false, agentOn),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeSegment(ConversationDetailViewModel vm, String label,
+      IconData icon, bool value, bool groupValue) {
+    final selected = value == groupValue;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => _toggleAgentChatMode(vm, value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: selected ? Colors.white : AppColors.ink3),
+            const SizedBox(width: 4),
+            Text(label,
+                style: AppFonts.body(
+                    size: 11.5,
+                    weight: FontWeight.w700,
+                    color: selected ? Colors.white : AppColors.ink3)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<ConversationDetailViewModel>();
@@ -171,21 +218,7 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2))
                   else
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('AI',
-                            style: AppFonts.body(
-                                size: 11.5,
-                                weight: FontWeight.w600,
-                                color: AppColors.ink3)),
-                        Switch(
-                          value: agentOn,
-                          activeTrackColor: AppColors.accent,
-                          onChanged: (v) => _toggleAgentChatMode(vm, v),
-                        ),
-                      ],
-                    ),
+                    _modeSwitcher(vm, agentOn),
                 ],
               ),
             ),
@@ -314,35 +347,77 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
     final labelColor =
         kind == GosureMessageSender.business ? Colors.white70 : AppColors.ink3;
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: bubbleColor,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMine ? 16 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 16),
-          ),
-          border: kind == GosureMessageSender.customer
-              ? Border.all(color: AppColors.line)
-              : null,
+    final avatar = _avatarFor(kind, label);
+    final bubble = Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: Radius.circular(isMine ? 16 : 4),
+          bottomRight: Radius.circular(isMine ? 4 : 16),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: AppFonts.body(
-                    size: 10.5, weight: FontWeight.w700, color: labelColor)),
-            const SizedBox(height: 2),
-            _markdownText(m.text, textColor),
-          ],
-        ),
+        border: kind == GosureMessageSender.customer
+            ? Border.all(color: AppColors.line)
+            : null,
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: AppFonts.body(
+                  size: 10.5, weight: FontWeight.w700, color: labelColor)),
+          const SizedBox(height: 2),
+          _markdownText(m.text, textColor),
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: isMine
+            ? [Flexible(child: bubble), const SizedBox(width: 6), avatar]
+            : [avatar, const SizedBox(width: 6), Flexible(child: bubble)],
+      ),
+    );
+  }
+
+  Widget _avatarFor(GosureMessageSender kind, String label) {
+    final (icon, bg, fg) = switch (kind) {
+      GosureMessageSender.customer => (
+          null,
+          AppColors.accentSoft,
+          AppColors.accent
+        ),
+      GosureMessageSender.agent => (
+          Icons.smart_toy_outlined,
+          AppColors.accentSoft,
+          AppColors.accent
+        ),
+      GosureMessageSender.business => (
+          Icons.person,
+          AppColors.accent,
+          Colors.white
+        ),
+    };
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: icon != null
+          ? Icon(icon, size: 14, color: fg)
+          : Text(
+              label.trim().isNotEmpty ? label.trim()[0].toUpperCase() : '?',
+              style: AppFonts.body(
+                  size: 12, weight: FontWeight.w700, color: fg),
+            ),
     );
   }
 

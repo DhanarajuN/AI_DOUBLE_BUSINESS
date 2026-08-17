@@ -24,11 +24,6 @@ class BusinessConversationsRepository extends ChangeNotifier {
   StreamSubscription<Map<String, dynamic>>? _eventsSub;
   Timer? _eventsReconnectTimer;
 
-  // Bumped on every openConversation()/closeConversation() call. History fetches and SSE
-  // subscriptions are async and can resolve out of order (e.g. a quick open-A, back,
-  // open-B can have A's slower request land after B's) — each async continuation checks
-  // this before touching state, so a stale response from an abandoned open() can never
-  // clobber whatever conversation is actually active now.
   int _openGeneration = 0;
 
   Future<void> loadConversations(String businessId,
@@ -79,13 +74,8 @@ class BusinessConversationsRepository extends ChangeNotifier {
       if (myGeneration != _openGeneration)
         return; // superseded by a newer open() while this was in flight
       activeMessages = history;
-      // Awaited, not fire-and-forget — a save that's still in flight when the tab closes
-      // or refreshes is a save that never happens, which is exactly the "badge came back
-      // after refresh" bug. This blocks nothing user-visible; the messages are already
-      // on screen from the notifyListeners() calls around this block.
       await _markSeen(conversation.conversationId);
     } catch (e) {
-      // Best-effort hydrate — don't block the live stream below if history fails to load.
       if (myGeneration != _openGeneration) return;
       activeError = friendlyError(e);
     } finally {
