@@ -108,4 +108,17 @@ class SessionStorage {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('$_readCountPrefix$conversationId', count);
   }
+
+  // Business/conversation state is scoped to whichever user resolved or entered it — clear it
+  // on logout so a different user signing in on the same device doesn't inherit the previous
+  // user's business ID or see its conversations already marked as read.
+  Future<void> clearBusinessData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_businessIdKey);
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith(_readCountPrefix)) {
+        await prefs.remove(key);
+      }
+    }
+  }
 }

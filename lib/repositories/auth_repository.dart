@@ -292,6 +292,7 @@ class AuthRepository extends ChangeNotifier {
   Future<void> logout() async {
     AppLogger.i('AuthRepository', 'logout');
     await _sessionStorage.clearSession();
+    await _sessionStorage.clearBusinessData();
     _apiClient.setAccessToken(null);
     _currentUser = null;
     _status = AuthStatus.unauthenticated;
