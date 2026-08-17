@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 
@@ -17,6 +18,7 @@ class SessionStorage {
   static const _usernameKey = 'auth_username';
   static const _roleNameKey = 'auth_role_name';
   static const _businessIdKey = 'gosure_business_id';
+  static const _businessDataKey = 'gosure_business_data';
   static const _rememberedUsernameKey = 'remembered_username';
   static const _rememberedPasswordKey = 'remembered_password';
 
@@ -116,6 +118,18 @@ class SessionStorage {
     await prefs.setString(_businessIdKey, businessId);
   }
 
+  Future<Map<String, dynamic>?> readBusinessData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_businessDataKey);
+    if (raw == null) return null;
+    return jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  Future<void> saveBusinessData(Map<String, dynamic> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_businessDataKey, jsonEncode(data));
+  }
+
   // How many messages this device had already seen in a conversation as of the last
   // time it was opened — compared against the list endpoint's live messageCount to
   // show a "N new" badge, the same way an unread-count badge works in any chat app.
@@ -137,6 +151,7 @@ class SessionStorage {
   Future<void> clearBusinessData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_businessIdKey);
+    await prefs.remove(_businessDataKey);
     for (final key in prefs.getKeys()) {
       if (key.startsWith(_readCountPrefix)) {
         await prefs.remove(key);

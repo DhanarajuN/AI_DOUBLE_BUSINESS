@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/booking.dart';
 import '../models/channel.dart';
-import '../models/industry.dart';
 import '../models/plan.dart';
 import '../repositories/workspace_repository.dart';
+import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../widgets/business_icons.dart';
@@ -57,7 +57,8 @@ class DashboardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) => DashboardViewModel(ctx.read<WorkspaceRepository>()),
+      create: (ctx) => DashboardViewModel(
+          ctx.read<WorkspaceRepository>(), ctx.read<SessionStorage>()),
       child: const _DashboardBody(),
     );
   }
@@ -74,7 +75,11 @@ class _DashboardBody extends StatelessWidget {
 
     final hour = DateTime.now().hour;
     final greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-    final ind = industryById(biz.industryId);
+    final data = vm.businessData;
+    final heroName = _firstNonEmpty(data, const ['Business Name', 'businessName', 'Company Name', 'Name']) ?? '';
+    final heroOwner = _firstNonEmpty(data, const ['Owner Name', 'ownerName', 'Contact Name', 'Full Name']) ?? '';
+    final heroCategory = _firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
+    final heroHours = _firstNonEmpty(data, const ['Availability Times', 'availabilityTimes', 'Available Hours'])?.split('(').first.trim();
     final plan = planById(biz.planId);
     final c = kCurrencies[vm.currency]!;
     final bks = vm.bookings;
@@ -98,7 +103,7 @@ class _DashboardBody extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
             children: [
-              _hero(biz.name, biz.owner, greet, ind, plan, c),
+              _hero(heroName, heroOwner, greet, heroCategory, heroHours, plan),
               const SizedBox(height: 14),
               _kpiGrid(context, bks.length, totalTok, plan, vm.docs.length),
               _sectionHeader('Bookings', 'Calendar →', () => _goTab(context, 1)),
@@ -289,7 +294,7 @@ class _DashboardBody extends StatelessWidget {
     (state as dynamic)?.goToTab(i);
   }
 
-  Widget _hero(String name, String owner, String greet, Industry ind, Plan plan, Currency c) {
+  Widget _hero(String name, String owner, String greet, String? category, String? hours, Plan plan) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(gradient: AppColors.chromeGradient, borderRadius: BorderRadius.circular(20)),
@@ -319,15 +324,17 @@ class _DashboardBody extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _heroTag(businessIcon(ind.iconKey), ind.name),
-              _heroTag(Icons.public_outlined, c.label),
-            ],
-          ),
+          if (category != null || hours != null) ...[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                if (category != null) _heroTag(Icons.category_outlined, category),
+                if (hours != null) _heroTag(Icons.access_time_outlined, hours),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -472,6 +479,15 @@ class _DashboardBody extends StatelessWidget {
           ],
         ),
       );
+
+  String? _firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
+    if (data == null) return null;
+    for (final key in keys) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
 
   Widget _empty(String text) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
