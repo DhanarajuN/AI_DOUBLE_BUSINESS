@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/gosure_conversation.dart';
 import '../models/gosure_message.dart';
 import '../repositories/business_conversations_repository.dart';
+import '../services/friendly_error.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/conversation_detail_view_model.dart';
 
@@ -88,7 +89,7 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Could not send: $e'),
+            content: Text('Could not send your message. ${friendlyError(e)}'),
             behavior: SnackBarBehavior.floating),
       );
     }
@@ -102,7 +103,7 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Could not update agent mode: $e'),
+            content: Text('Could not update agent mode. ${friendlyError(e)}'),
             behavior: SnackBarBehavior.floating),
       );
     }

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/gosure_conversation.dart';
 import '../models/gosure_message.dart';
+import '../services/app_logger.dart';
 import '../services/business_chat_service.dart';
+import '../services/friendly_error.dart';
 import '../services/session_storage.dart';
 
 class BusinessConversationsRepository extends ChangeNotifier {
@@ -20,6 +22,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
   bool loadingActive = false;
   String? activeError;
   StreamSubscription<Map<String, dynamic>>? _eventsSub;
+  Timer? _eventsReconnectTimer;
 
   // Bumped on every openConversation()/closeConversation() call. History fetches and SSE
   // subscriptions are async and can resolve out of order (e.g. a quick open-A, back,
@@ -46,7 +49,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
           : [...conversations, ...page.conversations];
       _nextCursor = page.nextCursor;
     } catch (e) {
-      conversationsError = e.toString();
+      conversationsError = friendlyError(e);
     } finally {
       loadingConversations = false;
       notifyListeners();
@@ -63,6 +66,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
     final myGeneration = ++_openGeneration;
     unawaited(_eventsSub?.cancel());
     _eventsSub = null;
+    _eventsReconnectTimer?.cancel();
     activeConversation = conversation;
     activeMessages = [];
     activeError = null;
@@ -83,7 +87,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
     } catch (e) {
       // Best-effort hydrate — don't block the live stream below if history fails to load.
       if (myGeneration != _openGeneration) return;
-      activeError = e.toString();
+      activeError = friendlyError(e);
     } finally {
       if (myGeneration == _openGeneration) {
         loadingActive = false;
@@ -94,16 +98,60 @@ class BusinessConversationsRepository extends ChangeNotifier {
     if (myGeneration != _openGeneration)
       return; // superseded before we got to subscribing
 
+    _subscribeToConversationEvents(
+        conversation.conversationId, businessId, myGeneration);
+  }
+
+  /// Like BusinessConversationsViewModel._startLiveUpdates, but for a single
+  /// open conversation's stream: the server sends a heartbeat to keep this
+  /// alive, but the underlying HTTP connection can still drop (proxy/network
+  /// blip, backend redeploy) — that used to surface as a raw
+  /// "ClientException: Connection closed while receiving data" banner with no
+  /// recovery, since this subscription had no onDone/reconnect handling
+  /// (unlike the conversation-list stream, which already reconnects
+  /// silently). Now it does the same: reconnect after a short delay instead
+  /// of leaving the viewer stuck on a dead stream, and only surface an error
+  /// if the *initial* connection can't be established at all — not on the
+  /// resulting exception from that.
+  void _subscribeToConversationEvents(
+      String conversationId, String businessId, int generation) {
+    if (generation != _openGeneration) return;
     _eventsSub = BusinessChatService.streamConversationEvents(
-            conversation.conversationId, businessId)
+            conversationId, businessId)
         .listen(
-      (event) => _handleEvent(event, myGeneration),
-      onError: (Object e) {
-        if (myGeneration != _openGeneration) return;
-        activeError = e.toString();
-        notifyListeners();
+      (event) {
+        if (generation != _openGeneration) return;
+        // A live event proves the connection recovered — clear any stale
+        // "connection closed" state a previous drop left behind.
+        if (activeError != null) {
+          activeError = null;
+          notifyListeners();
+        }
+        _handleEvent(event, generation);
       },
+      onError: (Object e) {
+        if (generation != _openGeneration) return;
+        AppLogger.w('BusinessConversationsRepo',
+            'Conversation events stream error, will retry: $e');
+        _reconnectConversationEventsSoon(conversationId, businessId, generation);
+      },
+      onDone: () {
+        if (generation != _openGeneration) return;
+        AppLogger.w('BusinessConversationsRepo',
+            'Conversation events stream closed, will retry');
+        _reconnectConversationEventsSoon(conversationId, businessId, generation);
+      },
+      cancelOnError: true,
     );
+  }
+
+  void _reconnectConversationEventsSoon(
+      String conversationId, String businessId, int generation) {
+    _eventsReconnectTimer?.cancel();
+    _eventsReconnectTimer = Timer(const Duration(seconds: 5), () {
+      if (generation != _openGeneration) return;
+      _subscribeToConversationEvents(conversationId, businessId, generation);
+    });
   }
 
   void _handleEvent(Map<String, dynamic> event, int generation) {
@@ -150,6 +198,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
     _openGeneration++; // invalidates any openConversation() call still in flight
     await _eventsSub?.cancel();
     _eventsSub = null;
+    _eventsReconnectTimer?.cancel();
     activeConversation = null;
     activeMessages = [];
     activeError = null;
@@ -167,7 +216,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
       _patchConversationInList(activeConversation!);
       notifyListeners();
     } catch (e) {
-      activeError = e.toString();
+      activeError = friendlyError(e);
       notifyListeners();
       rethrow;
     }
@@ -190,7 +239,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
             (parentId != null && parentId.isNotEmpty) ? parentId : null,
       );
     } catch (e) {
-      activeError = e.toString();
+      activeError = friendlyError(e);
       notifyListeners();
       rethrow;
     }
@@ -199,6 +248,7 @@ class BusinessConversationsRepository extends ChangeNotifier {
   @override
   void dispose() {
     _eventsSub?.cancel();
+    _eventsReconnectTimer?.cancel();
     super.dispose();
   }
 }

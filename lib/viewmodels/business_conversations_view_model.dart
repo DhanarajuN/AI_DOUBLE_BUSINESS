@@ -139,17 +139,25 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     });
   }
 
-  /// Finds the Business this signed-in user actually registered — matched by
-  /// createdByUsername (the account that created the record), not "Work
-  /// Email". Work Email is a free-text field from the registration form (a
-  /// business's public contact address) and often doesn't match the
-  /// registrant's own login email at all — confirmed against real records,
-  /// e.g. one business's Work Email is a contact address while its
-  /// createdByUsername is the actual account that registered it.
+  /// Finds the Business this signed-in user actually registered. Tries
+  /// createdByUsername first (the account that actually created the record),
+  /// then falls back to matching the business's own "Work Email" field: a
+  /// business owner reasonably expects signing in with the email they
+  /// registered the business under to count too, even when that's a public
+  /// contact address rather than the literal creator account (e.g. an admin
+  /// registered it on their behalf, or the account was later handed to
+  /// whoever owns that inbox) — confirmed against real records, e.g.
+  /// Cynosure Lutronic's createdByUsername is aidouble@gosure.ai while its
+  /// own Work Email is info@cynosure.com, and the business owner signs in
+  /// with the latter. Either match is a legitimate "this is your business"
+  /// signal — same two-tier logic as the portal's findMyBusiness() (see
+  /// jobtypes-api.ts), which this mirrors; that one shipped with the
+  /// fallback, this one didn't, which is exactly why business sign-in kept
+  /// falling through to the manual "Enter Business ID" prompt regardless of
+  /// whether the login was SSO or a plain email.
   /// createdByUsername isn't a `data.*` field, so it can't be server-side
-  /// filtered like Work Email was — fetches the (currently small) full list
-  /// and matches client-side instead, mirroring the portal's own fix for the
-  /// identical mismatch in its /biz ownership check (see cynosure.ts).
+  /// filtered like Work Email could be — fetches the (currently small) full
+  /// list and matches client-side instead.
   Future<String?> _resolveMyBusinessId(String email) async {
     final wanted = email.trim().toLowerCase();
     if (wanted.isEmpty) return null;
@@ -162,14 +170,24 @@ class BusinessConversationsViewModel extends ChangeNotifier {
 
     final jobs = result['jobs'] as List?;
     if (jobs == null) return null;
+
+    String? workEmailMatch;
     for (final job in jobs) {
       if (job is! Map<String, dynamic>) continue;
       final owner = job['createdByUsername'];
       if (owner is String && owner.trim().toLowerCase() == wanted) {
         return job['id'] as String?;
       }
+      if (workEmailMatch == null) {
+        final data = job['data'];
+        final workEmail =
+            data is Map<String, dynamic> ? data['Work Email'] : null;
+        if (workEmail is String && workEmail.trim().toLowerCase() == wanted) {
+          workEmailMatch = job['id'] as String?;
+        }
+      }
     }
-    return null;
+    return workEmailMatch;
   }
 
   Future<void> setBusinessId(String id) async {
