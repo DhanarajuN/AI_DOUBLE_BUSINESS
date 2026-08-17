@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../constants/server_urls.dart';
 import '../models/gosure_conversation.dart';
 import '../repositories/business_conversations_repository.dart';
 import '../services/api_client.dart';
@@ -36,9 +37,8 @@ class BusinessConversationsViewModel extends ChangeNotifier {
   String? _businessId;
   String? get businessId => _businessId;
 
-  // See SessionStorage.readBusinessId for the placeholder note. init() now tries to resolve
-  // this automatically first (see _resolveMyBusinessId) — the manual prompt below is only the
-  // fallback for when that lookup fails or finds nothing.
+  // True until _resolveBusinessId (see init/retryResolve) finds a match — there is no
+  // manual-entry fallback, so the UI shows a retry prompt instead while this is true.
   bool get needsBusinessId => _businessId == null || _businessId!.isEmpty;
 
   List<GosureConversation> get conversations => _repo.conversations;
@@ -64,6 +64,27 @@ class BusinessConversationsViewModel extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    await _resolveBusinessId();
+    if (!needsBusinessId) {
+      await refresh();
+      _startLiveUpdates();
+      _startPollFallback();
+    }
+  }
+
+  // Re-attempts auto-resolution after it previously failed to find a match — the only
+  // way forward now that there's no manual-entry fallback.
+  Future<void> retryResolve() async {
+    if (!needsBusinessId) return;
+    await _resolveBusinessId();
+    if (!needsBusinessId) {
+      await refresh();
+      _startLiveUpdates();
+      _startPollFallback();
+    }
+  }
+
+  Future<void> _resolveBusinessId() async {
     _businessId = await _sessionStorage.readBusinessId();
     if (needsBusinessId) {
       final session = await _sessionStorage.readSession();
@@ -76,21 +97,15 @@ class BusinessConversationsViewModel extends ChangeNotifier {
             _businessId = resolved;
           }
         } catch (e) {
-          // Falls through to the manual-entry prompt. Genuinely no account-
-          // to-business link exists yet for this signed-in user in that case
-          // (not an ACL/API failure — confirmed live: the query itself
-          // succeeds cleanly, it just found no match).
+          // Genuinely no account-to-business link exists yet for this signed-in
+          // user in that case (not an ACL/API failure — confirmed live: the
+          // query itself succeeds cleanly, it just found no match).
           AppLogger.w('BusinessConversationsVM',
               'Could not auto-resolve businessId: $e');
         }
       }
     }
     notifyListeners();
-    if (!needsBusinessId) {
-      await refresh();
-      _startLiveUpdates();
-      _startPollFallback();
-    }
   }
 
   /// Replaces fixed-interval polling as the primary update mechanism: a persistent SSE
@@ -163,7 +178,7 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     if (wanted.isEmpty) return null;
 
     final result = await _apiClient.get(
-      '/api/v1/job-types/name/Business/instances',
+      ServerUrls.businessInstances,
       query: {'pageNumber': '1', 'pageSize': '200', 'filters': '[]'},
     );
     if (result is! Map<String, dynamic>) return null;
@@ -188,17 +203,6 @@ class BusinessConversationsViewModel extends ChangeNotifier {
       }
     }
     return workEmailMatch;
-  }
-
-  Future<void> setBusinessId(String id) async {
-    final trimmed = id.trim();
-    if (trimmed.isEmpty) return;
-    await _sessionStorage.saveBusinessId(trimmed);
-    _businessId = trimmed;
-    notifyListeners();
-    await refresh();
-    _startLiveUpdates();
-    _startPollFallback();
   }
 
   Future<void> refresh() async {

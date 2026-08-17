@@ -78,7 +78,8 @@ class ApiClient {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         if (tenant != null) 'X-Tenant': tenant!,
-        if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+        if (_accessToken != null && _accessToken!.isNotEmpty)
+          'Authorization': 'Bearer $_accessToken',
       };
 
   dynamic _decode(http.Response response) {

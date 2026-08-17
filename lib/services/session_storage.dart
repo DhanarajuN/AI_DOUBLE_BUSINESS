@@ -17,6 +17,8 @@ class SessionStorage {
   static const _usernameKey = 'auth_username';
   static const _roleNameKey = 'auth_role_name';
   static const _businessIdKey = 'gosure_business_id';
+  static const _rememberedUsernameKey = 'remembered_username';
+  static const _rememberedPasswordKey = 'remembered_password';
 
   Future<String?> readAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -80,10 +82,30 @@ class SessionStorage {
     await prefs.remove(_roleNameKey);
   }
 
-  // Placeholder seam for "which business is this signed-in user managing" — nothing else in
-  // this app resolves a businessId yet (see AI_DOUBLE_BUSINESS business-conversations feature).
-  // Swap this for a real source (derived from the authenticated user, a business profile picked
-  // at signup, etc.) once one exists; until then it's set once via a small in-app prompt.
+  Future<void> saveRememberedCredentials(
+      {required String username, required String password}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_rememberedUsernameKey, username);
+    await prefs.setString(_rememberedPasswordKey, password);
+  }
+
+  Future<({String username, String password})?> readRememberedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString(_rememberedUsernameKey);
+    final password = prefs.getString(_rememberedPasswordKey);
+    if (username == null || password == null) return null;
+    return (username: username, password: password);
+  }
+
+  Future<void> clearRememberedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_rememberedUsernameKey);
+    await prefs.remove(_rememberedPasswordKey);
+  }
+
+  // Cache for the businessId auto-resolved from the signed-in user's account (see
+  // BusinessConversationsViewModel._resolveMyBusinessId) — there is no manual-entry
+  // fallback, so this stays empty until that resolution succeeds.
   Future<String?> readBusinessId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_businessIdKey);

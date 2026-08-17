@@ -208,13 +208,14 @@ class AuthRepository extends ChangeNotifier {
       );
     }
 
-    final roleResult = await _apiClient.get('/api/v1/roles/name/$roleName');
+    final roleResult =
+        await _apiClient.get('${ServerUrls.rolesByName}/$roleName');
     final roleId = roleResult is Map ? roleResult['id'] as String? : null;
     if (roleId == null) {
       throw Exception('Role "$roleName" not found for this tenant');
     }
 
-    final userResult = await _apiClient.get('/api/v1/users/$userId');
+    final userResult = await _apiClient.get('${ServerUrls.users}/$userId');
     if (userResult is! Map<String, dynamic>) {
       throw Exception('Unexpected response fetching user $userId');
     }
@@ -230,7 +231,7 @@ class AuthRepository extends ChangeNotifier {
       ..['roleId'] = roleId
       ..['accountRole'] = accountRole
       ..['roleName'] = '$roleName($roleId)';
-    await _apiClient.put('/api/v1/users/update/$userId', body: updated);
+    await _apiClient.put('${ServerUrls.usersUpdate}/$userId', body: updated);
     AppLogger.i('AuthRepository', 'Promoted user $userId to $roleName');
   }
 
@@ -240,11 +241,12 @@ class AuthRepository extends ChangeNotifier {
   /// filtering that excludes these records.
   Future<String?> _resolveConfiguredRoleName(String configKey) async {
     final uri = Uri.parse(
-        '${ServerUrls.coreMcpUrl}/core-mcp/configurations/${Uri.encodeComponent(configKey)}');
+        '${ServerUrls.coreMcpUrl}${ServerUrls.coreMcpConfigurations}/${Uri.encodeComponent(configKey)}');
     final response = await http.get(
       uri,
       headers: {
-        if (_apiClient.accessToken != null)
+        if (_apiClient.accessToken != null &&
+            _apiClient.accessToken!.isNotEmpty)
           'Authorization': 'Bearer ${_apiClient.accessToken}',
       },
     );

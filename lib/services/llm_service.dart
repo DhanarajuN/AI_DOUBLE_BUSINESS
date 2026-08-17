@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../constants/server_urls.dart';
 
 class LlmException implements Exception {
   final String message;
@@ -54,7 +55,7 @@ class LlmService {
 
   static Future<LlmResult> _callOpenAI(String key, String model, String system, List<Map<String, String>> messages) async {
     final res = await http.post(
-      Uri.parse('https://api.openai.com/v1/chat/completions'),
+      Uri.parse(ServerUrls.openAiChatCompletions),
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ${key.trim()}'},
       body: jsonEncode({
         'model': model,
@@ -73,7 +74,7 @@ class LlmService {
 
   static Future<LlmResult> _callAnthropic(String key, String model, String system, List<Map<String, String>> messages) async {
     final res = await http.post(
-      Uri.parse('https://api.anthropic.com/v1/messages'),
+      Uri.parse(ServerUrls.anthropicMessages),
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': key.trim(),
@@ -95,7 +96,8 @@ class LlmService {
   }
 
   static Future<LlmResult> _callGemini(String key, String model, String system, List<Map<String, String>> messages) async {
-    final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${key.trim()}');
+    final url = Uri.parse(
+        '${ServerUrls.geminiModels}/$model:generateContent?key=${key.trim()}');
     final contents = messages.map((m) => {'role': m['role'] == 'assistant' ? 'model' : 'user', 'parts': [{'text': m['content']}]}).toList();
     final res = await http.post(
       url,

@@ -34,14 +34,6 @@ class _BusinessConversationsBody extends StatefulWidget {
 
 class _BusinessConversationsBodyState
     extends State<_BusinessConversationsBody> {
-  final _businessIdCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _businessIdCtrl.dispose();
-    super.dispose();
-  }
-
   String _timeAgo(DateTime? t) {
     if (t == null) return '';
     final s = DateTime.now().difference(t).inSeconds;
@@ -88,16 +80,13 @@ class _BusinessConversationsBodyState
       ),
       body: SafeArea(
         child: vm.needsBusinessId
-            ? _businessIdSetup(vm)
+            ? _businessUnresolved(vm)
             : _conversationsList(context, vm),
       ),
     );
   }
 
-  Widget _businessIdSetup(BusinessConversationsViewModel vm) {
-    // Follow-up: this app has no established concept yet of "which business does this signed-in
-    // user manage" — this one-time prompt is a placeholder seam (see SessionStorage.readBusinessId)
-    // until that's wired up to a real source.
+  Widget _businessUnresolved(BusinessConversationsViewModel vm) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -106,30 +95,15 @@ class _BusinessConversationsBodyState
           children: [
             Icon(Icons.storefront_outlined, size: 40, color: AppColors.accent),
             const SizedBox(height: 14),
-            Text('Which business is this?', style: AppFonts.display(size: 18)),
+            Text("Couldn't find your business",
+                style: AppFonts.display(size: 18)),
             const SizedBox(height: 8),
             Text(
-              'Enter the business ID this account manages conversations for.',
+              "We couldn't match this account to a business yet. Try again once it's set up.",
               textAlign: TextAlign.center,
               style: AppFonts.body(size: 13, color: AppColors.ink3),
             ),
             const SizedBox(height: 18),
-            TextField(
-              controller: _businessIdCtrl,
-              style: AppFonts.body(size: 14, color: AppColors.ink),
-              decoration: InputDecoration(
-                hintText: 'Business ID',
-                filled: true,
-                fillColor: AppColors.card,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.line)),
-              ),
-              onSubmitted: (v) => vm.setBusinessId(v),
-            ),
-            const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -140,8 +114,8 @@ class _BusinessConversationsBodyState
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: () => vm.setBusinessId(_businessIdCtrl.text),
-                child: const Text('Continue'),
+                onPressed: vm.retryResolve,
+                child: const Text('Retry'),
               ),
             ),
           ],
@@ -226,8 +200,11 @@ class _BusinessConversationsBodyState
               decoration: BoxDecoration(
                   color: AppColors.accentSoft, shape: BoxShape.circle),
               alignment: Alignment.center,
-              child: Icon(Icons.chat_bubble_outline,
-                  size: 17, color: AppColors.accent),
+              child: Text(
+                title.trim().isNotEmpty ? title.trim()[0].toUpperCase() : '?',
+                style: AppFonts.body(
+                    size: 15, weight: FontWeight.w700, color: AppColors.accent),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(

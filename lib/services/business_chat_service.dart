@@ -85,7 +85,7 @@ class BusinessChatService {
   static Future<List<GosureMessage>> fetchConversationHistory(
       String conversationId, String businessId) async {
     final uri = Uri.parse(
-            '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/messages')
+            '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/${ServerUrls.gosureConvoMessages}')
         .replace(queryParameters: {'businessId': businessId});
     final res = await http.get(uri, headers: await _headers());
     AppLogger.i('BusinessChat',
@@ -176,7 +176,7 @@ class BusinessChatService {
   static Stream<Map<String, dynamic>> streamConversationEvents(
       String conversationId, String businessId) {
     final uri = Uri.parse(
-            '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/events')
+            '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/${ServerUrls.gosureConvoEvents}')
         .replace(queryParameters: {'businessId': businessId});
     return _openEventStream('streamConversationEvents($conversationId)', uri);
   }
@@ -186,16 +186,16 @@ class BusinessChatService {
   // screen react to real activity instead of polling on a fixed timer regardless of
   // whether anything actually happened.
   static Stream<Map<String, dynamic>> streamBusinessEvents(String businessId) {
-    final uri =
-        Uri.parse('${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/events')
-            .replace(queryParameters: {'businessId': businessId});
+    final uri = Uri.parse(
+            '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/${ServerUrls.gosureConvoEvents}')
+        .replace(queryParameters: {'businessId': businessId});
     return _openEventStream('streamBusinessEvents($businessId)', uri);
   }
 
   static Future<bool> setAgentChatMode(
       String conversationId, String businessId, bool value) async {
     final uri = Uri.parse(
-        '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/agent-mode');
+        '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/${ServerUrls.gosureConvoAgentMode}');
     final res = await http.patch(
       uri,
       headers: {...await _headers(), 'Content-Type': 'application/json'},
@@ -215,7 +215,7 @@ class BusinessChatService {
     String? parentMessageId,
   }) async {
     final uri = Uri.parse(
-        '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/messages');
+        '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId/${ServerUrls.gosureConvoMessages}');
     final res = await http.post(
       uri,
       headers: {...await _headers(), 'Content-Type': 'application/json'},
