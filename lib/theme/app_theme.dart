@@ -115,6 +115,13 @@ ThemeData buildAppTheme() {
     ),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
+    appBarTheme: AppBarTheme(
+      backgroundColor: AppColors.card,
+      foregroundColor: AppColors.ink,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
+      elevation: 0,
+    ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.chrome,
       contentTextStyle: AppFonts.body(size: 13.5, color: Colors.white),
