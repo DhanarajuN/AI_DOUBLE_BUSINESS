@@ -67,36 +67,45 @@ class _KnowledgeHub extends StatelessWidget {
                 categoryLabel: 'product',
                 categoryPlural: 'Products',
                 icon: Icons.inventory_2_outlined,
-                titleKeys: const ['Name', 'Product Name', 'Title'],
-                subtitleKeys: const ['Category', 'Description'],
+                titleKeys: const ['Product Name', 'Name', 'Title'],
+                subtitleKeys: const ['Product Category', 'Category', 'AI Description', 'Description'],
                 priceKeys: const ['Price', 'Amount'],
                 emptyTitle: 'No products yet',
                 emptyText: 'Products your business offers will show up here.',
                 items: (vm) => vm.products,
+                hasMore: (vm) => vm.productsHasMore,
+                loadingMore: (vm) => vm.productsLoadingMore,
+                loadMore: (vm) => vm.loadMoreProducts(),
               ),
               _CategoryTab(
                 category: kDocCategoryService,
                 categoryLabel: 'service',
                 categoryPlural: 'Services',
                 icon: Icons.design_services_outlined,
-                titleKeys: const ['Name', 'Service Name', 'Title'],
-                subtitleKeys: const ['Duration', 'Description'],
+                titleKeys: const ['Service Name', 'Name', 'Title'],
+                subtitleKeys: const ['Service Category', 'Category', 'Duration', 'AI Description', 'Description'],
                 priceKeys: const ['Price', 'Amount'],
                 emptyTitle: 'No services yet',
                 emptyText: 'Services your business offers will show up here.',
                 items: (vm) => vm.services,
+                hasMore: (vm) => vm.servicesHasMore,
+                loadingMore: (vm) => vm.servicesLoadingMore,
+                loadMore: (vm) => vm.loadMoreServices(),
               ),
               _CategoryTab(
                 category: kDocCategoryProvider,
                 categoryLabel: 'provider',
                 categoryPlural: 'Providers',
                 icon: Icons.badge_outlined,
-                titleKeys: const ['Name', 'Provider Name', 'Full Name'],
-                subtitleKeys: const ['Role', 'Specialty'],
-                priceKeys: const ['Phone', 'Availability'],
+                titleKeys: const ['Provider Name', 'Name', 'Full Name'],
+                subtitleKeys: const ['Specialization', 'Role', 'Specialty', 'Description', 'AI Description'],
+                priceKeys: const ['Phone Number', 'Phone', 'Availability'],
                 emptyTitle: 'No providers yet',
                 emptyText: 'People who fulfil orders and services will show up here.',
                 items: (vm) => vm.providers,
+                hasMore: (vm) => vm.providersHasMore,
+                loadingMore: (vm) => vm.providersLoadingMore,
+                loadMore: (vm) => vm.loadMoreProviders(),
               ),
             ],
           ),
@@ -117,6 +126,9 @@ class _CategoryTab extends StatefulWidget {
   final String emptyTitle;
   final String emptyText;
   final List<Map<String, dynamic>> Function(DashboardViewModel vm) items;
+  final bool Function(DashboardViewModel vm) hasMore;
+  final bool Function(DashboardViewModel vm) loadingMore;
+  final Future<void> Function(DashboardViewModel vm) loadMore;
 
   const _CategoryTab({
     required this.category,
@@ -129,6 +141,9 @@ class _CategoryTab extends StatefulWidget {
     required this.emptyTitle,
     required this.emptyText,
     required this.items,
+    required this.hasMore,
+    required this.loadingMore,
+    required this.loadMore,
   });
 
   @override
@@ -138,16 +153,31 @@ class _CategoryTab extends StatefulWidget {
 class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClientMixin {
   final _titleCtrl = TextEditingController();
   final _textCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
   bool _isPaste = true;
 
   @override
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
   void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
     _titleCtrl.dispose();
     _textCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels < _scrollCtrl.position.maxScrollExtent - 200) return;
+    final vm = context.read<DashboardViewModel>();
+    if (widget.hasMore(vm) && !widget.loadingMore(vm)) widget.loadMore(vm);
   }
 
   Future<void> _addText(KnowledgeViewModel vm) async {
@@ -193,6 +223,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
     final categoryDocs = knowledgeVm.docs.where((d) => d.category == widget.category).toList();
 
     return ListView(
+      controller: _scrollCtrl,
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: [
         _uploadCard(knowledgeVm),
@@ -205,10 +236,19 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
         const SizedBox(height: 20),
         Text(widget.categoryPlural, style: AppFonts.display(size: 17)),
         const SizedBox(height: 10),
-        if (items.isEmpty) _emptyState() else ...items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _categoryCard(context, item),
-            )),
+        if (items.isEmpty)
+          _emptyState()
+        else ...[
+          ...items.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _categoryCard(context, item),
+              )),
+          if (widget.loadingMore(dashVm))
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+        ],
       ],
     );
   }

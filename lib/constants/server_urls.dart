@@ -26,6 +26,9 @@ class ServerUrls {
   static const String businessInstances =
       '/api/v1/job-types/name/Business/instances';
 
+  static String jobTypeInstances(String typeName) =>
+      '/api/v1/job-types/name/$typeName/instances';
+
   static const String jobInstances = '/api/v1/job-instances';
 
   static const String coreMcpConfigurations = '/core-mcp/configurations';
