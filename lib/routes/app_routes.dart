@@ -38,7 +38,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String signup = '/signup';
   static const String home = '/home';
-  // Also reachable as home_shell_view's "Chats" tab (index 2) — this named route stays for
+  // Also reachable as home_shell_view's "Chats" tab (index 3) — this named route stays for
   // deep-linking into it directly (e.g. from a push notification for a specific conversation).
   static const String businessConversations = '/business/conversations';
 

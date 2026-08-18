@@ -1,15 +1,6 @@
 import 'app_logger.dart';
 
-/// Turns a raw caught error into a short, human-readable message safe to show
-/// directly in the UI. Every network/API call in this app was surfacing raw
-/// exception text instead — things like "ClientException: Connection closed
-/// while receiving data, uri=https://..." — straight into error banners and
-/// snackbars. That reads as a crash/glitch to a non-technical user even when
-/// the underlying cause (a dropped connection, a timeout) is completely
-/// routine. Pattern-matches on the exception's own text since the callers
-/// here deal with a mix of ApiException, http's ClientException/SocketException,
-/// TimeoutException, and plain Exception — there's no single shared type to
-/// switch on.
+
 String friendlyError(Object error) {
   final raw = error.toString();
   final lower = raw.toLowerCase();

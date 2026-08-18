@@ -102,6 +102,15 @@ class _DashboardBody extends StatelessWidget {
     final bksMonth = bks.where((b) => b.time.year == now.year && b.time.month == now.month).length;
     final upcoming = bks.where((b) => b.status == BookingStatus.confirmed || b.status == BookingStatus.pending).length;
     final completed = bks.where((b) => b.status == BookingStatus.completed).length;
+    final orders = vm.orders;
+    final ordersWeek = orders.where((o) {
+      final created = _parseDate(o['createdAt']);
+      return created != null && now.difference(created).inDays < 7;
+    }).length;
+    final ordersMonth = orders.where((o) {
+      final created = _parseDate(o['createdAt']);
+      return created != null && created.year == now.year && created.month == now.month;
+    }).length;
 
     return Scaffold(
       backgroundColor: AppColors.paper2,
@@ -135,14 +144,25 @@ class _DashboardBody extends StatelessWidget {
                   ],
                 ),
               ),
-              _sectionHeader('Orders', '${fmtN(vm.ordersCount)} total', null),
+              _sectionHeader('Orders', 'View all →', () => _goTab(context, 2)),
               _card(
-                child: vm.orders.isEmpty
-                    ? _empty('No orders yet.')
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: vm.orders.take(5).map((o) => _orderRow(context, o)).toList(),
-                      ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        _stat(fmtN(orders.length), 'total'),
+                        _stat(fmtN(ordersWeek), 'this week'),
+                        _stat(fmtN(ordersMonth), 'this month'),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (orders.isEmpty)
+                      _empty('No orders yet.')
+                    else
+                      ...orders.take(5).map((o) => orderRow(context, o)),
+                  ],
+                ),
               ),
               _sectionHeader('AI usage', '${fmtN(vm.usageCalls)} calls', null),
               _card(
@@ -217,7 +237,7 @@ class _DashboardBody extends StatelessWidget {
                   ],
                 ),
               ),
-              _sectionHeader('Files uploaded', 'Manage →', () => _goTab(context, 3)),
+              _sectionHeader('Files uploaded', 'Manage →', () => _goTab(context, 4)),
               _card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -259,7 +279,7 @@ class _DashboardBody extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 11),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
                         ),
-                        onPressed: () => _goTab(context, 3),
+                        onPressed: () => _goTab(context, 4),
                         icon: Icon(Icons.upload_outlined, size: 16, color: AppColors.ink),
                         label: Text('Add documents', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink)),
                       ),
@@ -344,7 +364,7 @@ class _DashboardBody extends StatelessWidget {
       childAspectRatio: 1.5,
       children: [
         _kpi(Icons.calendar_month_outlined, fmtN(bookings), 'Bookings', AppColors.accent, AppColors.accentSoft, () => _goTab(context, 1)),
-        _kpi(Icons.shopping_bag_outlined, fmtN(ordersCount), 'Orders', const Color(0xFF4F46E5), const Color(0x194F46E5), null),
+        _kpi(Icons.shopping_bag_outlined, fmtN(ordersCount), 'Orders', const Color(0xFF4F46E5), const Color(0x194F46E5), () => _goTab(context, 2)),
         _kpi(Icons.local_offer_outlined, plan.name, 'Current plan', AppColors.amber, const Color(0x19B45309), () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlansView()))),
         _kpi(Icons.bar_chart_outlined, fmtTok(tokens), 'AI tokens used', AppColors.ok, const Color(0x190E8A5F), null),
       ],
@@ -534,172 +554,6 @@ class _DashboardBody extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(IconData icon, String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 17, color: AppColors.ink3),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
-                  const SizedBox(height: 2),
-                  Text(value, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Map<String, dynamic> _orderData(Map<String, dynamic> order) =>
-      order['data'] is Map ? Map<String, dynamic>.from(order['data'] as Map) : <String, dynamic>{};
-
-  String _orderTitle(Map<String, dynamic> order, Map<String, dynamic> data) =>
-      _firstNonEmpty(data, const ['Customer Name', 'Name', 'Title', 'Product Name', 'Product', 'Item', 'Order Name']) ??
-      'Order ${_shortId(order)}';
-
-  String _shortId(Map<String, dynamic> order, {bool full = false}) {
-    final id = (order['id'] ?? order['_id'])?.toString() ?? '';
-    if (id.isEmpty) return '—';
-    if (full || id.length <= 8) return id;
-    return id.substring(id.length - 8);
-  }
-
-  DateTime? _parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
-
-  String _humanizeKey(String key) {
-    if (key.contains(' ')) return key;
-    final spaced = key.replaceAllMapped(RegExp(r'(?<=[a-z0-9])(?=[A-Z])'), (m) => ' ');
-    if (spaced.isEmpty) return key;
-    return spaced[0].toUpperCase() + spaced.substring(1);
-  }
-
-  Widget _orderRow(BuildContext context, Map<String, dynamic> order) {
-    final data = _orderData(order);
-    final title = _orderTitle(order, data);
-    final subtitle = _firstNonEmpty(data, const ['Item', 'Product', 'Product Name', 'Service', 'Status']) ?? 'Tap for details';
-    final created = _parseDate(order['createdAt']);
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => _showOrderDetail(context, order),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-              alignment: Alignment.center,
-              child: Icon(Icons.shopping_bag_outlined, size: 16, color: AppColors.accent),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
-                ],
-              ),
-            ),
-            if (created != null) ...[
-              Text(timeAgo(created), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
-              const SizedBox(width: 4),
-            ],
-            Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showOrderDetail(BuildContext context, Map<String, dynamic> order) {
-    final data = _orderData(order);
-    final title = _orderTitle(order, data);
-    final created = _parseDate(order['createdAt']);
-    final fields = data.entries
-        .where((e) => e.value is String || e.value is num || e.value is bool)
-        .where((e) => e.value.toString().trim().isNotEmpty)
-        .take(8)
-        .toList();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 18),
-                    decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-                      alignment: Alignment.center,
-                      child: Icon(Icons.shopping_bag_outlined, size: 20, color: AppColors.accent),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(title, style: AppFonts.display(size: 17))),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                if (created != null) _detailRow(Icons.event_outlined, 'Created', fmtDateTime(created)),
-                if (fields.isEmpty)
-                  _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
-                else
-                  ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
-                _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
-                const SizedBox(height: 4),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.line2),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-                    ),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String? _firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
-    if (data == null) return null;
-    for (final key in keys) {
-      final value = data[key];
-      if (value is String && value.trim().isNotEmpty) return value.trim();
-    }
-    return null;
-  }
-
   Widget _empty(String text) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Text(text, textAlign: TextAlign.center, style: AppFonts.body(size: 12.5, color: AppColors.ink3)),
@@ -749,4 +603,314 @@ class _DashboardBody extends StatelessWidget {
       child: LinearProgressIndicator(value: pct, minHeight: 8, backgroundColor: AppColors.paper2, valueColor: AlwaysStoppedAnimation(color)),
     );
   }
+}
+
+Widget _detailRow(IconData icon, String label, String value) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: AppColors.ink3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                const SizedBox(height: 2),
+                Text(value, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+String? _firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
+  if (data == null) return null;
+  for (final key in keys) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return null;
+}
+
+Map<String, dynamic> orderData(Map<String, dynamic> order) =>
+    order['data'] is Map ? Map<String, dynamic>.from(order['data'] as Map) : <String, dynamic>{};
+
+String orderTitle(Map<String, dynamic> order, Map<String, dynamic> data) =>
+    _firstNonEmpty(data, const ['Customer Name', 'Name', 'Title', 'Product Name', 'Product', 'Item', 'Order Name']) ??
+    'Order ${_shortId(order)}';
+
+String _shortId(Map<String, dynamic> order, {bool full = false}) {
+  final id = (order['id'] ?? order['_id'])?.toString() ?? '';
+  if (id.isEmpty) return '—';
+  if (full || id.length <= 8) return id;
+  return id.substring(id.length - 8);
+}
+
+DateTime? _parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
+
+const kOrderLifecycle = ['Placed', 'Accepted', 'In Transit', 'Delivered'];
+
+bool _isCancelledStatus(String? status) => (status ?? '').toLowerCase() == 'cancelled';
+
+int _lifecycleIndexOf(String? status) {
+  if (status == null) return -1;
+  return kOrderLifecycle.indexWhere((s) => s.toLowerCase() == status.toLowerCase());
+}
+
+String? orderStatusOf(Map<String, dynamic> data) {
+  for (final entry in data.entries) {
+    if (entry.key.toLowerCase() == 'status' &&
+        entry.value is String &&
+        (entry.value as String).trim().isNotEmpty) {
+      return (entry.value as String).trim();
+    }
+  }
+  return null;
+}
+
+Color orderStatusColor(String? status) {
+  final s = (status ?? '').toLowerCase();
+  if (s.contains('deliver') || s.contains('complet') || s.contains('paid')) return AppColors.ok;
+  if (s.contains('transit') || s.contains('process') || s.contains('progress')) return AppColors.amber;
+  if (s.contains('cancel') || s.contains('fail') || s.contains('reject')) return AppColors.danger;
+  if (s.contains('placed') || s.contains('pend')) return AppColors.ink3;
+  return AppColors.accent;
+}
+
+Widget _orderStatusStepper(
+  Map<String, dynamic> order,
+  String? status,
+  DashboardViewModel vm,
+  StateSetter setSheetState,
+) {
+  if (_isCancelledStatus(status)) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.danger.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          const Icon(Icons.cancel_outlined, size: 18, color: AppColors.danger),
+          const SizedBox(width: 8),
+          Text('This order was cancelled', style: AppFonts.body(size: 13, weight: FontWeight.w600, color: AppColors.danger)),
+        ],
+      ),
+    );
+  }
+
+  final currentIndex = _lifecycleIndexOf(status);
+  final delivered = currentIndex == kOrderLifecycle.length - 1;
+
+  void advanceTo(String stage) {
+    vm.updateOrderStatus(order, stage);
+    setSheetState(() {});
+  }
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (status != null && currentIndex == -1)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text('Current: $status', style: AppFonts.body(size: 12, color: AppColors.ink3)),
+        ),
+      ...List.generate(kOrderLifecycle.length, (i) {
+        final stage = kOrderLifecycle[i];
+        final done = i <= currentIndex;
+        final isNext = i == currentIndex + 1;
+        final color = done ? orderStatusColor(stage) : (isNext ? AppColors.accent : AppColors.line2);
+        return InkWell(
+          onTap: isNext ? () => advanceTo(stage) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: done ? color : Colors.transparent,
+                        border: Border.all(color: color, width: 2),
+                      ),
+                      alignment: Alignment.center,
+                      child: done ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+                    ),
+                    if (i != kOrderLifecycle.length - 1)
+                      Container(width: 2, height: 20, color: i < currentIndex ? orderStatusColor(stage) : AppColors.line2),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      stage,
+                      style: AppFonts.body(
+                        size: 13.5,
+                        weight: done || isNext ? FontWeight.w600 : FontWeight.w400,
+                        color: done ? AppColors.ink : (isNext ? AppColors.accent : AppColors.ink3),
+                      ),
+                    ),
+                  ),
+                ),
+                if (isNext) Icon(Icons.arrow_forward, size: 14, color: AppColors.accent),
+              ],
+            ),
+          ),
+        );
+      }),
+      if (!delivered) ...[
+        const SizedBox(height: 6),
+        TextButton.icon(
+          onPressed: () => advanceTo('Cancelled'),
+          icon: const Icon(Icons.close, size: 15, color: AppColors.danger),
+          label: Text('Cancel order', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.danger)),
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+String _humanizeKey(String key) {
+  if (key.contains(' ')) return key;
+  final spaced = key.replaceAllMapped(RegExp(r'(?<=[a-z0-9])(?=[A-Z])'), (m) => ' ');
+  if (spaced.isEmpty) return key;
+  return spaced[0].toUpperCase() + spaced.substring(1);
+}
+
+Widget orderRow(BuildContext context, Map<String, dynamic> order) {
+  final data = orderData(order);
+  final title = orderTitle(order, data);
+  final subtitle = _firstNonEmpty(data, const ['Item', 'Product', 'Product Name', 'Service', 'Status']) ?? 'Tap for details';
+  final created = _parseDate(order['createdAt']);
+  return InkWell(
+    borderRadius: BorderRadius.circular(10),
+    onTap: () => showOrderDetail(context, order),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Icon(Icons.shopping_bag_outlined, size: 16, color: AppColors.accent),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
+              ],
+            ),
+          ),
+          if (created != null) ...[
+            Text(timeAgo(created), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
+            const SizedBox(width: 4),
+          ],
+          Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
+        ],
+      ),
+    ),
+  );
+}
+
+void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
+  final vm = context.read<DashboardViewModel>();
+  final title = orderTitle(order, orderData(order));
+  final created = _parseDate(order['createdAt']);
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.card,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheetState) {
+        final data = orderData(order);
+        final status = orderStatusOf(data);
+        final fields = data.entries
+            .where((e) => e.key.toLowerCase() != 'status')
+            .where((e) => e.value is String || e.value is num || e.value is bool)
+            .where((e) => e.value.toString().trim().isNotEmpty)
+            .take(8)
+            .toList();
+
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 18),
+                      decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                        alignment: Alignment.center,
+                        child: Icon(Icons.shopping_bag_outlined, size: 20, color: AppColors.accent),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(title, style: AppFonts.display(size: 17))),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  if (created != null) _detailRow(Icons.event_outlined, 'Created', fmtDateTime(created)),
+                  Text('Status', style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                  const SizedBox(height: 10),
+                  _orderStatusStepper(order, status, vm, setSheetState),
+                  const SizedBox(height: 16),
+                  if (fields.isEmpty)
+                    _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
+                  else
+                    ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
+                  _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.line2),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }

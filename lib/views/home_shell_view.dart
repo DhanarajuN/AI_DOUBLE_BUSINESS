@@ -7,6 +7,7 @@ import 'business_conversations_view.dart';
 import 'calendar_view.dart';
 import 'dashboard_view.dart';
 import 'knowledge_view.dart';
+import 'orders_view.dart';
 
 class HomeShellView extends StatefulWidget {
   const HomeShellView({super.key});
@@ -26,6 +27,11 @@ class _HomeShellViewState extends State<HomeShellView> {
       label: 'Calendar'
     ),
     (
+      icon: Icons.shopping_bag_outlined,
+      iconOn: Icons.shopping_bag,
+      label: 'Orders'
+    ),
+    (
       icon: Icons.chat_bubble_outline,
       iconOn: Icons.chat_bubble,
       label: 'Chats'
@@ -33,7 +39,7 @@ class _HomeShellViewState extends State<HomeShellView> {
     (
       icon: Icons.description_outlined,
       iconOn: Icons.description,
-      label: 'Docs'
+      label: 'Knowledge'
     ),
     (icon: Icons.person_outline, iconOn: Icons.person, label: 'Account'),
   ];
@@ -41,6 +47,7 @@ class _HomeShellViewState extends State<HomeShellView> {
   final _pages = const [
     DashboardView(),
     CalendarView(),
+    OrdersView(),
     BusinessConversationsView(),
     KnowledgeView(),
     AccountView(),

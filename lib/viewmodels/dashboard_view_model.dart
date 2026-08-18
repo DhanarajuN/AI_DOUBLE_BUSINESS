@@ -40,19 +40,37 @@ class DashboardViewModel extends ChangeNotifier {
       'id': 'dummy-order-1',
       'jobTypeName': 'Orders',
       'createdAt': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-      'data': {'Customer Name': 'Aarav Sharma', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Processing'},
+      'data': {'Customer Name': 'Aarav Sharma', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Accepted'},
     },
     {
       'id': 'dummy-order-2',
       'jobTypeName': 'Orders',
       'createdAt': DateTime.now().subtract(const Duration(days: 1, hours: 2)).toIso8601String(),
-      'data': {'Customer Name': 'Priya Nair', 'Product Name': 'Website Chat Widget', 'Amount': '₹1,499', 'Status': 'Completed'},
+      'data': {'Customer Name': 'Priya Nair', 'Product Name': 'Website Chat Widget', 'Amount': '₹1,499', 'Status': 'Delivered'},
     },
     {
       'id': 'dummy-order-3',
       'jobTypeName': 'Orders',
       'createdAt': DateTime.now().subtract(const Duration(days: 2, hours: 5)).toIso8601String(),
-      'data': {'Customer Name': 'Rohan Gupta', 'Product Name': 'WhatsApp Integration', 'Amount': '₹2,999', 'Status': 'Pending'},
+      'data': {'Customer Name': 'Rohan Gupta', 'Product Name': 'WhatsApp Integration', 'Amount': '₹2,999', 'Status': 'In Transit'},
+    },
+    {
+      'id': 'dummy-order-4',
+      'jobTypeName': 'Orders',
+      'createdAt': DateTime.now().subtract(const Duration(hours: 20)).toIso8601String(),
+      'data': {'Customer Name': 'Neha Iyer', 'Product Name': 'Calendar Booking Setup', 'Amount': '₹1,999', 'Status': 'Placed'},
+    },
+    {
+      'id': 'dummy-order-5',
+      'jobTypeName': 'Orders',
+      'createdAt': DateTime.now().subtract(const Duration(days: 10)).toIso8601String(),
+      'data': {'Customer Name': 'Karthik Rao', 'Product Name': 'Knowledge Base Import', 'Amount': '₹3,499', 'Status': 'Delivered'},
+    },
+    {
+      'id': 'dummy-order-6',
+      'jobTypeName': 'Orders',
+      'createdAt': DateTime.now().subtract(const Duration(days: 40)).toIso8601String(),
+      'data': {'Customer Name': 'Divya Menon', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Cancelled'},
     },
   ];
 
@@ -63,11 +81,27 @@ class DashboardViewModel extends ChangeNotifier {
 
   int get ordersCount => orders.length;
 
+  void updateOrderStatus(Map<String, dynamic> order, String status) {
+    var data = order['data'];
+    if (data is! Map) {
+      data = <String, dynamic>{};
+      order['data'] = data;
+    }
+    final key = data.keys.cast<String>().firstWhere(
+          (k) => k.toLowerCase() == 'status',
+          orElse: () => 'Status',
+        );
+    data[key] = status;
+    notifyListeners();
+  }
+
   Future<void> _loadBusinessData() async {
     _businessData = await _sessionStorage.readBusinessData();
     notifyListeners();
     await _loadSubJobs();
   }
+
+  Future<void> refresh() => _loadSubJobs();
 
   // Sub jobs of the resolved Business record — GET /api/v1/job-instances/:businessId
   // returns {jobs: [{...business fields..., CreatedSubJobs: [{jobTypeName, data, ...}]}]}.
