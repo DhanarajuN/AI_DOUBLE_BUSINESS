@@ -1,3 +1,5 @@
+import 'app_logger.dart';
+
 /// Turns a raw caught error into a short, human-readable message safe to show
 /// directly in the UI. Every network/API call in this app was surfacing raw
 /// exception text instead — things like "ClientException: Connection closed
@@ -44,4 +46,9 @@ String friendlyError(Object error) {
     return "Something went wrong on our end. Please try again in a moment.";
   }
   return "Something went wrong. Please try again.";
+}
+
+String logFriendlyError(String tag, Object error, [StackTrace? stackTrace]) {
+  AppLogger.e(tag, 'Raw error', error, stackTrace);
+  return friendlyError(error);
 }

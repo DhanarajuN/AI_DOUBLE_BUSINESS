@@ -32,6 +32,15 @@ String timeAgo(DateTime t) {
   return '${d ~/ 7}w ago';
 }
 
+const _kMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+String fmtDateTime(DateTime t) {
+  final hour12 = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final ampm = t.hour < 12 ? 'AM' : 'PM';
+  final minute = t.minute.toString().padLeft(2, '0');
+  return '${_kMonths[t.month - 1]} ${t.day}, ${t.year} · $hour12:$minute $ampm';
+}
+
 String initialsOf(String name) {
   final p = name.trim().split(RegExp(r'\s+'));
   final a = p.isNotEmpty && p[0].isNotEmpty ? p[0][0] : '';
@@ -93,10 +102,6 @@ class _DashboardBody extends StatelessWidget {
     final bksMonth = bks.where((b) => b.time.year == now.year && b.time.month == now.month).length;
     final upcoming = bks.where((b) => b.status == BookingStatus.confirmed || b.status == BookingStatus.pending).length;
     final completed = bks.where((b) => b.status == BookingStatus.completed).length;
-    final chanTally = <String, int>{};
-    for (final b in bks) {
-      chanTally[b.channelId] = (chanTally[b.channelId] ?? 0) + 1;
-    }
 
     return Scaffold(
       backgroundColor: AppColors.paper2,
@@ -122,46 +127,22 @@ class _DashboardBody extends StatelessWidget {
                         _stat(fmtN(completed), 'completed'),
                       ],
                     ),
-                    if (chanTally.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: chanTally.entries.map((e) {
-                          final ch = channelById(e.key);
-                          return _pill('${ch.name} · ${e.value}', businessIcon(ch.iconKey));
-                        }).toList(),
-                      ),
-                    ],
                     const SizedBox(height: 10),
                     if (bks.isEmpty)
                       _empty('No bookings yet.')
                     else
-                      ...bks.take(5).map((b) => _bookingRow(b)),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: AppColors.paper2,
-                          side: BorderSide(color: AppColors.line2),
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-                        ),
-                        onPressed: () async {
-                          final bk = await vm.simulateBooking();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${bk.customerName} just booked · ${bk.service}'), behavior: SnackBarBehavior.floating),
-                            );
-                          }
-                        },
-                        icon: Icon(Icons.auto_awesome_outlined, size: 16, color: AppColors.ink),
-                        label: Text('Simulate an incoming booking', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink)),
-                      ),
-                    ),
+                      ...bks.take(5).map((b) => _bookingRow(context, b)),
                   ],
                 ),
+              ),
+              _sectionHeader('Orders', '${fmtN(vm.ordersCount)} total', null),
+              _card(
+                child: vm.orders.isEmpty
+                    ? _empty('No orders yet.')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: vm.orders.take(5).map((o) => _orderRow(context, o)).toList(),
+                      ),
               ),
               _sectionHeader('AI usage', '${fmtN(vm.usageCalls)} calls', null),
               _card(
@@ -434,20 +415,178 @@ class _DashboardBody extends StatelessWidget {
         ),
       );
 
-  Widget _pill(String text, IconData icon) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(color: AppColors.paper, borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.line)),
+  Widget _bookingRow(BuildContext context, Booking b) => InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _showBookingDetail(context, b),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Text(initialsOf(b.customerName), style: AppFonts.body(size: 11.5, weight: FontWeight.w700, color: AppColors.accent)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(b.customerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                    Text('${b.service} · ${channelById(b.channelId).name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(color: statusColor(b.status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
+                    child: Text(bookingStatusLabel(b.status), style: AppFonts.mono(size: 9.5, color: statusColor(b.status))),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(timeAgo(b.time), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
+            ],
+          ),
+        ),
+      );
+
+  void _showBookingDetail(BuildContext context, Booking b) {
+    final ch = channelById(b.channelId);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: Text(initialsOf(b.customerName), style: AppFonts.body(size: 14, weight: FontWeight.w700, color: AppColors.accent)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(b.customerName, style: AppFonts.display(size: 17)),
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: statusColor(b.status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
+                            child: Text(bookingStatusLabel(b.status), style: AppFonts.mono(size: 10, color: statusColor(b.status))),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _detailRow(Icons.design_services_outlined, 'Service', b.service),
+                _detailRow(businessIcon(ch.iconKey), 'Channel', ch.name),
+                _detailRow(Icons.event_outlined, 'Date & time', fmtDateTime(b.time)),
+                _detailRow(Icons.tag, 'Booking ID', b.id),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppColors.line2),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(IconData icon, String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 12, color: AppColors.ink3),
-            const SizedBox(width: 5),
-            Text(text, style: AppFonts.body(size: 11.5, color: AppColors.ink2)),
+            Icon(icon, size: 17, color: AppColors.ink3),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                  const SizedBox(height: 2),
+                  Text(value, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                ],
+              ),
+            ),
           ],
         ),
       );
 
-  Widget _bookingRow(Booking b) => Padding(
+  Map<String, dynamic> _orderData(Map<String, dynamic> order) =>
+      order['data'] is Map ? Map<String, dynamic>.from(order['data'] as Map) : <String, dynamic>{};
+
+  String _orderTitle(Map<String, dynamic> order, Map<String, dynamic> data) =>
+      _firstNonEmpty(data, const ['Customer Name', 'Name', 'Title', 'Product Name', 'Product', 'Item', 'Order Name']) ??
+      'Order ${_shortId(order)}';
+
+  String _shortId(Map<String, dynamic> order, {bool full = false}) {
+    final id = (order['id'] ?? order['_id'])?.toString() ?? '';
+    if (id.isEmpty) return '—';
+    if (full || id.length <= 8) return id;
+    return id.substring(id.length - 8);
+  }
+
+  DateTime? _parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
+
+  String _humanizeKey(String key) {
+    if (key.contains(' ')) return key;
+    final spaced = key.replaceAllMapped(RegExp(r'(?<=[a-z0-9])(?=[A-Z])'), (m) => ' ');
+    if (spaced.isEmpty) return key;
+    return spaced[0].toUpperCase() + spaced.substring(1);
+  }
+
+  Widget _orderRow(BuildContext context, Map<String, dynamic> order) {
+    final data = _orderData(order);
+    final title = _orderTitle(order, data);
+    final subtitle = _firstNonEmpty(data, const ['Item', 'Product', 'Product Name', 'Service', 'Status']) ?? 'Tap for details';
+    final created = _parseDate(order['createdAt']);
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _showOrderDetail(context, order),
+      child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
@@ -456,33 +595,101 @@ class _DashboardBody extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
               alignment: Alignment.center,
-              child: Text(initialsOf(b.customerName), style: AppFonts.body(size: 11.5, weight: FontWeight.w700, color: AppColors.accent)),
+              child: Icon(Icons.shopping_bag_outlined, size: 16, color: AppColors.accent),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(b.customerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                  Text('${b.service} · ${channelById(b.channelId).name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
+                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(color: statusColor(b.status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-                  child: Text(bookingStatusLabel(b.status), style: AppFonts.mono(size: 9.5, color: statusColor(b.status))),
-                ),
-                const SizedBox(height: 3),
-                Text(timeAgo(b.time), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
-              ],
-            ),
+            if (created != null) ...[
+              Text(timeAgo(created), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
+              const SizedBox(width: 4),
+            ],
+            Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
           ],
         ),
-      );
+      ),
+    );
+  }
+
+  void _showOrderDetail(BuildContext context, Map<String, dynamic> order) {
+    final data = _orderData(order);
+    final title = _orderTitle(order, data);
+    final created = _parseDate(order['createdAt']);
+    final fields = data.entries
+        .where((e) => e.value is String || e.value is num || e.value is bool)
+        .where((e) => e.value.toString().trim().isNotEmpty)
+        .take(8)
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: Icon(Icons.shopping_bag_outlined, size: 20, color: AppColors.accent),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(title, style: AppFonts.display(size: 17))),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                if (created != null) _detailRow(Icons.event_outlined, 'Created', fmtDateTime(created)),
+                if (fields.isEmpty)
+                  _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
+                else
+                  ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
+                _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppColors.line2),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   String? _firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
     if (data == null) return null;

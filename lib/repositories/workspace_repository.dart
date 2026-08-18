@@ -212,24 +212,6 @@ class WorkspaceRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Booking> simulateBooking() async {
-    final ind = industryById(business?.industryId);
-    final bk = Booking(
-      id: 'bk${DateTime.now().millisecondsSinceEpoch}',
-      customerName: _randName(),
-      service: _pick(ind.services),
-      channelId: _pick(kChannels).id,
-      time: DateTime.now(),
-      status: BookingStatus.confirmed,
-    );
-    bookings.insert(0, bk);
-    await _saveBookings();
-    final t = 900 + _rand.nextInt(2000);
-    await recordUsage((t * 0.58).round(), (t * 0.42).round());
-    notifyListeners();
-    return bk;
-  }
-
   Future<Booking> addBookingOn(DateTime day) async {
     final ind = industryById(business?.industryId);
     final hour = 9 + _rand.nextInt(9);

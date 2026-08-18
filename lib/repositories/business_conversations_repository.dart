@@ -43,8 +43,8 @@ class BusinessConversationsRepository extends ChangeNotifier {
           ? page.conversations
           : [...conversations, ...page.conversations];
       _nextCursor = page.nextCursor;
-    } catch (e) {
-      conversationsError = friendlyError(e);
+    } catch (e, st) {
+      conversationsError = logFriendlyError('BusinessConversationsRepo', e, st);
     } finally {
       loadingConversations = false;
       notifyListeners();
@@ -75,9 +75,9 @@ class BusinessConversationsRepository extends ChangeNotifier {
         return; // superseded by a newer open() while this was in flight
       activeMessages = history;
       await _markSeen(conversation.conversationId);
-    } catch (e) {
+    } catch (e, st) {
       if (myGeneration != _openGeneration) return;
-      activeError = friendlyError(e);
+      activeError = logFriendlyError('BusinessConversationsRepo', e, st);
     } finally {
       if (myGeneration == _openGeneration) {
         loadingActive = false;
@@ -205,8 +205,8 @@ class BusinessConversationsRepository extends ChangeNotifier {
       activeConversation = convo.copyWith(agentChatMode: applied);
       _patchConversationInList(activeConversation!);
       notifyListeners();
-    } catch (e) {
-      activeError = friendlyError(e);
+    } catch (e, st) {
+      activeError = logFriendlyError('BusinessConversationsRepo', e, st);
       notifyListeners();
       rethrow;
     }
@@ -228,8 +228,8 @@ class BusinessConversationsRepository extends ChangeNotifier {
         parentMessageId:
             (parentId != null && parentId.isNotEmpty) ? parentId : null,
       );
-    } catch (e) {
-      activeError = friendlyError(e);
+    } catch (e, st) {
+      activeError = logFriendlyError('BusinessConversationsRepo', e, st);
       notifyListeners();
       rethrow;
     }

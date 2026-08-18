@@ -24,14 +24,44 @@ class DashboardViewModel extends ChangeNotifier {
   List<dynamic> _subJobs = [];
   List<dynamic> get subJobs => _subJobs;
 
-  int _countSubJobsOfType(String jobTypeName) => _subJobs.where((j) {
-        if (j is! Map) return false;
+  List<Map<String, dynamic>> _subJobsOfType(String jobTypeName) => _subJobs
+      .whereType<Map>()
+      .where((j) {
         final type = j['jobTypeName'];
         return type is String && type.toLowerCase() == jobTypeName.toLowerCase();
-      }).length;
+      })
+      .map((j) => Map<String, dynamic>.from(j))
+      .toList();
 
-  int get bookingsCount => _countSubJobsOfType('Bookings');
-  int get ordersCount => _countSubJobsOfType('Orders');
+  int get bookingsCount => _subJobsOfType('Bookings').length;
+
+  static final List<Map<String, dynamic>> _dummyOrders = [
+    {
+      'id': 'dummy-order-1',
+      'jobTypeName': 'Orders',
+      'createdAt': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
+      'data': {'Customer Name': 'Aarav Sharma', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Processing'},
+    },
+    {
+      'id': 'dummy-order-2',
+      'jobTypeName': 'Orders',
+      'createdAt': DateTime.now().subtract(const Duration(days: 1, hours: 2)).toIso8601String(),
+      'data': {'Customer Name': 'Priya Nair', 'Product Name': 'Website Chat Widget', 'Amount': '₹1,499', 'Status': 'Completed'},
+    },
+    {
+      'id': 'dummy-order-3',
+      'jobTypeName': 'Orders',
+      'createdAt': DateTime.now().subtract(const Duration(days: 2, hours: 5)).toIso8601String(),
+      'data': {'Customer Name': 'Rohan Gupta', 'Product Name': 'WhatsApp Integration', 'Amount': '₹2,999', 'Status': 'Pending'},
+    },
+  ];
+
+  List<Map<String, dynamic>> get orders {
+    final real = _subJobsOfType('Orders');
+    return real.isNotEmpty ? real : _dummyOrders;
+  }
+
+  int get ordersCount => orders.length;
 
   Future<void> _loadBusinessData() async {
     _businessData = await _sessionStorage.readBusinessData();
@@ -71,8 +101,6 @@ class DashboardViewModel extends ChangeNotifier {
   int get usageCalls => _workspace.usageCalls;
   List<int> get usageDaily => _workspace.usageDaily;
   String get currency => _workspace.currency;
-
-  Future<Booking> simulateBooking() => _workspace.simulateBooking();
 
   @override
   void dispose() {

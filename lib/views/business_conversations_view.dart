@@ -275,25 +275,6 @@ class _BusinessConversationsBodyState
     if (vm.loading && vm.conversations.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (vm.error != null && vm.conversations.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, color: AppColors.danger, size: 32),
-              const SizedBox(height: 10),
-              Text(vm.error!,
-                  textAlign: TextAlign.center,
-                  style: AppFonts.body(size: 13, color: AppColors.ink3)),
-              const SizedBox(height: 14),
-              OutlinedButton(onPressed: vm.refresh, child: const Text('Retry')),
-            ],
-          ),
-        ),
-      );
-    }
 
     final users = _groupByUser(vm, vm.conversations);
 
@@ -331,7 +312,7 @@ class _BusinessConversationsBodyState
           Expanded(
             child: vm.conversations.isEmpty
                 ? Center(
-                    child: Text('No conversations yet.',
+                    child: Text('No conversations available.',
                         style:
                             AppFonts.body(size: 13.5, color: AppColors.ink3)),
                   )
