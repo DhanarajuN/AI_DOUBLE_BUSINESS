@@ -31,6 +31,11 @@ class ServerUrls {
 
   static const String jobInstances = '/api/v1/job-instances';
 
+  static const String s3ObjectDownload = '/api/v1/s3-objects/download';
+
+  static String s3ObjectDownloadUrl(String url) =>
+      '$baseUrl$s3ObjectDownload?url=${Uri.encodeQueryComponent(url)}';
+
   static const String coreMcpConfigurations = '/core-mcp/configurations';
 
   static const String librechatURL = String.fromEnvironment(

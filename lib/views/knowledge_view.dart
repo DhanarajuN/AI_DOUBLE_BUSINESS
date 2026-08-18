@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../constants/server_urls.dart';
 import '../models/doc_source.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
@@ -413,6 +414,44 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
         ),
       );
 
+  Widget _categoryAvatar(BuildContext context, Map<String, dynamic> data, {required double size, required double iconSize}) {
+    final imageUrl = _firstImageUrl(data);
+    final fallback = Icon(widget.icon, size: iconSize, color: AppColors.accent);
+    final apiClient = context.read<ApiClient>();
+    final avatar = Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: imageUrl == null
+          ? fallback
+          : Image.network(
+              ServerUrls.s3ObjectDownloadUrl(imageUrl),
+              headers: _imageHeaders(apiClient),
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => fallback,
+              loadingBuilder: (_, child, progress) => progress == null
+                  ? child
+                  : SizedBox(
+                      width: size * 0.5,
+                      height: size * 0.5,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                    ),
+            ),
+    );
+
+    if (imageUrl == null) return avatar;
+    return InkWell(
+      borderRadius: BorderRadius.circular(size / 2),
+      onTap: () => _openImageViewer(
+          context, ServerUrls.s3ObjectDownloadUrl(imageUrl), _imageHeaders(apiClient)),
+      child: avatar,
+    );
+  }
+
   Widget _categoryCard(BuildContext context, Map<String, dynamic> item) {
     final data = _itemData(item);
     final title = _firstNonEmptyField(data, widget.titleKeys) ?? 'Untitled';
@@ -431,13 +470,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-              alignment: Alignment.center,
-              child: Icon(widget.icon, size: 18, color: AppColors.accent),
-            ),
+            _categoryAvatar(context, data, size: 40, iconSize: 18),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -501,13 +534,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                 ),
                 Row(
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-                      alignment: Alignment.center,
-                      child: Icon(widget.icon, size: 20, color: AppColors.accent),
-                    ),
+                    _categoryAvatar(context, data, size: 44, iconSize: 20),
                     const SizedBox(width: 12),
                     Expanded(child: Text(title, style: AppFonts.display(size: 17))),
                   ],
@@ -539,8 +566,75 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
   }
 }
 
+void _openImageViewer(BuildContext context, String url, Map<String, String> headers) {
+  showDialog(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4,
+              child: Center(
+                child: Image.network(
+                  url,
+                  headers: headers,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : const Center(child: CircularProgressIndicator(color: Colors.white)),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: SafeArea(
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 Map<String, dynamic> _itemData(Map<String, dynamic> item) =>
     item['data'] is Map ? Map<String, dynamic>.from(item['data'] as Map) : <String, dynamic>{};
+
+String? _firstImageUrl(Map<String, dynamic> data) {
+  dynamic search(dynamic node) {
+    if (node is Map) {
+      final url = node['fileUrl'];
+      if (url is String && url.trim().isNotEmpty) return url.trim();
+      return null;
+    }
+    if (node is List) {
+      for (final child in node) {
+        final found = search(child);
+        if (found != null) return found;
+      }
+    }
+    return null;
+  }
+
+  return search(data['Image']) as String?;
+}
+
+Map<String, String> _imageHeaders(ApiClient apiClient) => {
+      if (apiClient.tenant != null) 'X-Tenant': apiClient.tenant!,
+      if ((apiClient.accessToken ?? '').isNotEmpty) 'Authorization': 'Bearer ${apiClient.accessToken}',
+    };
 
 String? _firstNonEmptyField(Map<String, dynamic> data, List<String> keys) {
   for (final key in keys) {
