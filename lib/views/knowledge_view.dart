@@ -1,6 +1,6 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../constants/server_urls.dart';
 import '../models/doc_source.dart';
 import '../repositories/workspace_repository.dart';
@@ -181,38 +181,10 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
     if (widget.hasMore(vm) && !widget.loadingMore(vm)) widget.loadMore(vm);
   }
 
-  Future<void> _addText(KnowledgeViewModel vm) async {
-    final error = await vm.addText(_titleCtrl.text, _textCtrl.text, category: widget.category);
-    if (!mounted) return;
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), behavior: SnackBarBehavior.floating));
-      return;
-    }
-    _titleCtrl.clear();
-    _textCtrl.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document added'), behavior: SnackBarBehavior.floating));
-  }
-
-  Future<void> _pickFile(KnowledgeViewModel vm) async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      withData: true,
-      type: FileType.custom,
-      allowedExtensions: ['txt', 'md', 'csv', 'json', 'log'],
+  void _showComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Coming soon'), behavior: SnackBarBehavior.floating),
     );
-    if (result == null || !mounted) return;
-    final files = [
-      for (final f in result.files)
-        if (f.bytes != null) (f.name, f.bytes!, f.size),
-    ];
-    final warnings = await vm.addPickedFiles(files, category: widget.category);
-    if (!mounted) return;
-    for (final w in warnings) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(w), behavior: SnackBarBehavior.floating));
-    }
-    if (warnings.length < files.length) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document added'), behavior: SnackBarBehavior.floating));
-    }
   }
 
   @override
@@ -227,7 +199,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
       controller: _scrollCtrl,
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: [
-        _uploadCard(knowledgeVm),
+        _uploadCard(),
         if (categoryDocs.isNotEmpty) ...[
           const SizedBox(height: 18),
           Text('${widget.categoryPlural} documents', style: AppFonts.display(size: 15)),
@@ -254,7 +226,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
     );
   }
 
-  Widget _uploadCard(KnowledgeViewModel vm) {
+  Widget _uploadCard() {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
     return Container(
       padding: const EdgeInsets.all(14),
@@ -322,7 +294,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
                 ),
-                onPressed: () => _addText(vm),
+                onPressed: _showComingSoon,
                 icon: const Icon(Icons.check, size: 17),
                 label: const Text('Add document', style: TextStyle(fontWeight: FontWeight.w600)),
               ),
@@ -330,7 +302,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
           ] else
             InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: vm.picking ? null : () => _pickFile(vm),
+              onTap: _showComingSoon,
               child: Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -340,9 +312,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                 ),
                 child: Column(
                   children: [
-                    vm.picking
-                        ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
-                        : Icon(Icons.upload_file_outlined, color: AppColors.accent, size: 20),
+                    Icon(Icons.upload_file_outlined, color: AppColors.accent, size: 20),
                     const SizedBox(height: 8),
                     Text('Tap to browse for a file', style: AppFonts.body(size: 13, color: AppColors.ink)),
                     const SizedBox(height: 4),
@@ -543,7 +513,9 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                 if (fields.isEmpty)
                   _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
                 else
-                  ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
+                  ...fields.map((e) => _isPhoneKey(e.key)
+                      ? _phoneDetailRow(ctx, _humanizeKey(e.key), e.value.toString())
+                      : _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
                 const SizedBox(height: 4),
                 SizedBox(
                   width: double.infinity,
@@ -669,5 +641,53 @@ Widget _detailRow(IconData icon, String label, String value) => Padding(
             ),
           ),
         ],
+      ),
+    );
+
+bool _isPhoneKey(String key) {
+  final k = key.toLowerCase();
+  return k.contains('phone') || k.contains('mobile') || k.contains('whatsapp') || k.contains('contact number');
+}
+
+Future<void> _callPhoneNumber(BuildContext context, String phoneNumber) async {
+  final digits = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+  final uri = Uri(scheme: 'tel', path: digits);
+  final launched = await launchUrl(uri);
+  if (!launched && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not open the dialer for $phoneNumber'), behavior: SnackBarBehavior.floating),
+    );
+  }
+}
+
+Widget _phoneDetailRow(BuildContext context, String label, String value) => InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _callPhoneNumber(context, value),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: Icon(Icons.call, size: 15, color: AppColors.accent),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                  const SizedBox(height: 2),
+                  Text(value, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.accent)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 16, color: AppColors.ink3),
+          ],
+        ),
       ),
     );
