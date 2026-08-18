@@ -1,9 +1,15 @@
+const kDocCategoryGeneral = 'general';
+const kDocCategoryProduct = 'product';
+const kDocCategoryService = 'service';
+const kDocCategoryProvider = 'provider';
+
 class DocSource {
   final String id;
   final String name;
   final String text;
   final String meta;
   final bool isFile;
+  final String category;
 
   const DocSource({
     required this.id,
@@ -11,6 +17,7 @@ class DocSource {
     required this.text,
     required this.meta,
     this.isFile = false,
+    this.category = kDocCategoryGeneral,
   });
 
   Map<String, dynamic> toJson() => {
@@ -19,6 +26,7 @@ class DocSource {
         'text': text,
         'meta': meta,
         'isFile': isFile,
+        'category': category,
       };
 
   factory DocSource.fromJson(Map<String, dynamic> json) => DocSource(
@@ -27,5 +35,6 @@ class DocSource {
         text: json['text'] as String,
         meta: json['meta'] as String? ?? '',
         isFile: json['isFile'] as bool? ?? false,
+        category: json['category'] as String? ?? kDocCategoryGeneral,
       );
 }

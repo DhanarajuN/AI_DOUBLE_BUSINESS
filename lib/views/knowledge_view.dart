@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/doc_source.dart';
 import '../repositories/workspace_repository.dart';
+import '../services/api_client.dart';
+import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
+import '../viewmodels/dashboard_view_model.dart';
 import '../viewmodels/knowledge_view_model.dart';
 import '../widgets/business_icons.dart';
 
@@ -12,23 +15,133 @@ class KnowledgeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (ctx) => KnowledgeViewModel(ctx.read<WorkspaceRepository>()),
-      child: const _KnowledgeBody(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (ctx) => DashboardViewModel(
+              ctx.read<WorkspaceRepository>(), ctx.read<SessionStorage>(), ctx.read<ApiClient>()),
+        ),
+        ChangeNotifierProvider(
+          create: (ctx) => KnowledgeViewModel(ctx.read<WorkspaceRepository>()),
+        ),
+      ],
+      child: const _KnowledgeHub(),
     );
   }
 }
 
-class _KnowledgeBody extends StatefulWidget {
-  const _KnowledgeBody();
+class _KnowledgeHub extends StatelessWidget {
+  const _KnowledgeHub();
 
   @override
-  State<_KnowledgeBody> createState() => _KnowledgeBodyState();
+  Widget build(BuildContext context) {
+    context.watch<WorkspaceRepository>();
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: AppColors.paper2,
+        appBar: AppBar(
+          backgroundColor: AppColors.card,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          foregroundColor: AppColors.ink,
+          title: Text('Knowledge', style: AppFonts.display(size: 17)),
+          bottom: TabBar(
+            labelColor: AppColors.accent,
+            unselectedLabelColor: AppColors.ink3,
+            indicatorColor: AppColors.accent,
+            labelStyle: AppFonts.body(size: 13, weight: FontWeight.w600),
+            unselectedLabelStyle: AppFonts.body(size: 13, weight: FontWeight.w600),
+            tabs: const [
+              Tab(text: 'Products'),
+              Tab(text: 'Services'),
+              Tab(text: 'Providers'),
+            ],
+          ),
+        ),
+        body: SafeArea(
+          child: TabBarView(
+            children: [
+              _CategoryTab(
+                category: kDocCategoryProduct,
+                categoryLabel: 'product',
+                categoryPlural: 'Products',
+                icon: Icons.inventory_2_outlined,
+                titleKeys: const ['Name', 'Product Name', 'Title'],
+                subtitleKeys: const ['Category', 'Description'],
+                priceKeys: const ['Price', 'Amount'],
+                emptyTitle: 'No products yet',
+                emptyText: 'Products your business offers will show up here.',
+                items: (vm) => vm.products,
+              ),
+              _CategoryTab(
+                category: kDocCategoryService,
+                categoryLabel: 'service',
+                categoryPlural: 'Services',
+                icon: Icons.design_services_outlined,
+                titleKeys: const ['Name', 'Service Name', 'Title'],
+                subtitleKeys: const ['Duration', 'Description'],
+                priceKeys: const ['Price', 'Amount'],
+                emptyTitle: 'No services yet',
+                emptyText: 'Services your business offers will show up here.',
+                items: (vm) => vm.services,
+              ),
+              _CategoryTab(
+                category: kDocCategoryProvider,
+                categoryLabel: 'provider',
+                categoryPlural: 'Providers',
+                icon: Icons.badge_outlined,
+                titleKeys: const ['Name', 'Provider Name', 'Full Name'],
+                subtitleKeys: const ['Role', 'Specialty'],
+                priceKeys: const ['Phone', 'Availability'],
+                emptyTitle: 'No providers yet',
+                emptyText: 'People who fulfil orders and services will show up here.',
+                items: (vm) => vm.providers,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _KnowledgeBodyState extends State<_KnowledgeBody> {
+class _CategoryTab extends StatefulWidget {
+  final String category;
+  final String categoryLabel;
+  final String categoryPlural;
+  final IconData icon;
+  final List<String> titleKeys;
+  final List<String> subtitleKeys;
+  final List<String> priceKeys;
+  final String emptyTitle;
+  final String emptyText;
+  final List<Map<String, dynamic>> Function(DashboardViewModel vm) items;
+
+  const _CategoryTab({
+    required this.category,
+    required this.categoryLabel,
+    required this.categoryPlural,
+    required this.icon,
+    required this.titleKeys,
+    required this.subtitleKeys,
+    required this.priceKeys,
+    required this.emptyTitle,
+    required this.emptyText,
+    required this.items,
+  });
+
+  @override
+  State<_CategoryTab> createState() => _CategoryTabState();
+}
+
+class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClientMixin {
   final _titleCtrl = TextEditingController();
   final _textCtrl = TextEditingController();
+  bool _isPaste = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void dispose() {
@@ -38,7 +151,7 @@ class _KnowledgeBodyState extends State<_KnowledgeBody> {
   }
 
   Future<void> _addText(KnowledgeViewModel vm) async {
-    final error = await vm.addText(_titleCtrl.text, _textCtrl.text);
+    final error = await vm.addText(_titleCtrl.text, _textCtrl.text, category: widget.category);
     if (!mounted) return;
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), behavior: SnackBarBehavior.floating));
@@ -46,7 +159,7 @@ class _KnowledgeBodyState extends State<_KnowledgeBody> {
     }
     _titleCtrl.clear();
     _textCtrl.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Source added'), behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document added'), behavior: SnackBarBehavior.floating));
   }
 
   Future<void> _pickFile(KnowledgeViewModel vm) async {
@@ -61,229 +174,366 @@ class _KnowledgeBodyState extends State<_KnowledgeBody> {
       for (final f in result.files)
         if (f.bytes != null) (f.name, f.bytes!, f.size),
     ];
-    final warnings = await vm.addPickedFiles(files);
+    final warnings = await vm.addPickedFiles(files, category: widget.category);
     if (!mounted) return;
     for (final w in warnings) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(w), behavior: SnackBarBehavior.floating));
     }
     if (warnings.length < files.length) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File added'), behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document added'), behavior: SnackBarBehavior.floating));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final vm = context.watch<KnowledgeViewModel>();
-    final totalChars = vm.docs.fold<int>(0, (a, d) => a + d.text.length);
+    super.build(context);
+    final dashVm = context.watch<DashboardViewModel>();
+    final knowledgeVm = context.watch<KnowledgeViewModel>();
+    final items = widget.items(dashVm);
+    final categoryDocs = knowledgeVm.docs.where((d) => d.category == widget.category).toList();
 
-    return Scaffold(
-      backgroundColor: AppColors.paper2,
-      appBar: AppBar(
-        backgroundColor: AppColors.card,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Text('Your documents', style: AppFonts.display(size: 18)),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-          children: [
-            Text(
-              'What you add here becomes the context the assistant answers from. It stays on this device; only the text you send is passed to your AI provider.',
-              style: AppFonts.body(size: 13, color: AppColors.ink2).copyWith(height: 1.5),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                _stat('${vm.docs.length}', 'Sources'),
-                _stat('${(totalChars / 1000).toStringAsFixed(1)}k', 'Characters'),
-                _stat(vm.keyReady ? 'On' : 'Off', 'AI connected'),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Container(
-              decoration: BoxDecoration(color: AppColors.paper2, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
-              padding: const EdgeInsets.all(4),
-              child: Row(
-                children: [
-                  Expanded(child: _srcTab('Paste text', vm.mode == KnowledgeSourceMode.paste, () => vm.setMode(KnowledgeSourceMode.paste))),
-                  Expanded(child: _srcTab('Upload file', vm.mode == KnowledgeSourceMode.upload, () => vm.setMode(KnowledgeSourceMode.upload))),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (vm.mode == KnowledgeSourceMode.paste) _pasteArea(vm) else _uploadArea(vm),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Sources', style: AppFonts.display(size: 17)),
-                if (vm.docs.isNotEmpty)
-                  GestureDetector(
-                    onTap: vm.clearDocs,
-                    child: Text('Clear all', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (vm.docs.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.line)),
-                child: Text(
-                  'No sources yet. Add a document and the assistant will answer from it — with the source named.',
-                  textAlign: TextAlign.center,
-                  style: AppFonts.body(size: 13, color: AppColors.ink3),
-                ),
-              )
-            else
-              ...vm.docs.map((d) => _docRow(vm, d)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _stat(String value, String label) => Expanded(
-        child: Container(
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.line)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value, style: AppFonts.display(size: 20)),
-              Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
-            ],
-          ),
-        ),
-      );
-
-  Widget _srcTab(String label, bool on, VoidCallback onTap) => InkWell(
-        borderRadius: BorderRadius.circular(9),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: on ? AppColors.card : null, borderRadius: BorderRadius.circular(9)),
-          child: Text(label, style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: on ? AppColors.ink : AppColors.ink2)),
-        ),
-      );
-
-  Widget _pasteArea(KnowledgeViewModel vm) {
-    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: [
-        TextField(
-          controller: _titleCtrl,
-          style: AppFonts.body(size: 14, color: AppColors.ink),
-          decoration: InputDecoration(
-            hintText: 'Title (e.g. Price list 2026)',
-            hintStyle: AppFonts.body(size: 13.5, color: AppColors.ink3),
-            filled: true,
-            fillColor: AppColors.card,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-            border: border,
-            enabledBorder: border,
-            focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent)),
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _textCtrl,
-          maxLines: 6,
-          style: AppFonts.body(size: 13.5, color: AppColors.ink),
-          decoration: InputDecoration(
-            hintText: "Paste a price list, FAQ, policy clause — anything you'd want answered from.",
-            hintStyle: AppFonts.body(size: 13, color: AppColors.ink3),
-            filled: true,
-            fillColor: AppColors.card,
-            contentPadding: const EdgeInsets.all(13),
-            border: border,
-            enabledBorder: border,
-            focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent)),
-          ),
-        ),
+        _uploadCard(knowledgeVm),
+        if (categoryDocs.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text('${widget.categoryPlural} documents', style: AppFonts.display(size: 15)),
+          const SizedBox(height: 10),
+          ...categoryDocs.map((d) => _docRow(knowledgeVm, d)),
+        ],
+        const SizedBox(height: 20),
+        Text(widget.categoryPlural, style: AppFonts.display(size: 17)),
         const SizedBox(height: 10),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 13),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          onPressed: () => _addText(vm),
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('Add source', style: TextStyle(fontWeight: FontWeight.w600)),
-        ),
+        if (items.isEmpty) _emptyState() else ...items.map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _categoryCard(context, item),
+            )),
       ],
     );
   }
 
-  Widget _uploadArea(KnowledgeViewModel vm) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: vm.picking ? null : () => _pickFile(vm),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.paper,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.line2, width: 1.4, style: BorderStyle.solid),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: AppColors.paper2, borderRadius: BorderRadius.circular(12)),
-              alignment: Alignment.center,
-              child: vm.picking
-                  ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
-                  : Icon(Icons.upload_outlined, color: AppColors.accent, size: 22),
+  Widget _uploadCard(KnowledgeViewModel vm) {
+    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.line)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.upload_outlined, size: 16, color: AppColors.accent),
+              const SizedBox(width: 8),
+              Text('Upload a ${widget.categoryLabel} document', style: AppFonts.body(size: 13, weight: FontWeight.w700, color: AppColors.ink)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(color: AppColors.paper2, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.line)),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              children: [
+                Expanded(child: _modeTab('Paste text', _isPaste, () => setState(() => _isPaste = true))),
+                Expanded(child: _modeTab('Upload file', !_isPaste, () => setState(() => _isPaste = false))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_isPaste) ...[
+            TextField(
+              controller: _titleCtrl,
+              style: AppFonts.body(size: 13.5, color: AppColors.ink),
+              decoration: InputDecoration(
+                hintText: 'Title (e.g. ${widget.categoryPlural} price list)',
+                hintStyle: AppFonts.body(size: 13, color: AppColors.ink3),
+                filled: true,
+                fillColor: AppColors.paper2,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                border: border,
+                enabledBorder: border,
+                focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _textCtrl,
+              maxLines: 4,
+              style: AppFonts.body(size: 13, color: AppColors.ink),
+              decoration: InputDecoration(
+                hintText: 'Paste details about your ${widget.categoryLabel}s here.',
+                hintStyle: AppFonts.body(size: 13, color: AppColors.ink3),
+                filled: true,
+                fillColor: AppColors.paper2,
+                contentPadding: const EdgeInsets.all(12),
+                border: border,
+                enabledBorder: border,
+                focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent)),
+              ),
             ),
             const SizedBox(height: 10),
-            Text('Tap to browse for a file', style: AppFonts.body(size: 14, color: AppColors.ink)),
-            const SizedBox(height: 6),
-            Text('txt · md · csv · json · log — text is read on-device', style: AppFonts.mono(size: 10.5, color: AppColors.ink3)),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                ),
+                onPressed: () => _addText(vm),
+                icon: const Icon(Icons.check, size: 17),
+                label: const Text('Add document', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ] else
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: vm.picking ? null : () => _pickFile(vm),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.paper2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.line2, width: 1.2),
+                ),
+                child: Column(
+                  children: [
+                    vm.picking
+                        ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
+                        : Icon(Icons.upload_file_outlined, color: AppColors.accent, size: 20),
+                    const SizedBox(height: 8),
+                    Text('Tap to browse for a file', style: AppFonts.body(size: 13, color: AppColors.ink)),
+                    const SizedBox(height: 4),
+                    Text('txt · md · csv · json · log', style: AppFonts.mono(size: 10, color: AppColors.ink3)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeTab(String label, bool on, VoidCallback onTap) => InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: on ? AppColors.card : null, borderRadius: BorderRadius.circular(8)),
+          child: Text(label, style: AppFonts.body(size: 12, weight: FontWeight.w600, color: on ? AppColors.ink : AppColors.ink2)),
+        ),
+      );
+
+  Widget _docRow(KnowledgeViewModel vm, DocSource d) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.line)),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(8)),
+              alignment: Alignment.center,
+              child: Icon(businessIcon(d.isFile ? 'file' : 'doc'), size: 16, color: AppColors.accent),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13, weight: FontWeight.w600, color: AppColors.ink)),
+                  Text(d.meta, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () => vm.removeDoc(d.id),
+              icon: Icon(Icons.delete_outline, color: AppColors.ink3, size: 19),
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(6),
+            ),
+          ],
+        ),
+      );
+
+  Widget _emptyState() => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.line)),
+        child: Column(
+          children: [
+            Icon(widget.icon, size: 24, color: AppColors.accent),
+            const SizedBox(height: 10),
+            Text(widget.emptyTitle, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+            const SizedBox(height: 4),
+            Text(widget.emptyText, textAlign: TextAlign.center, style: AppFonts.body(size: 12.5, color: AppColors.ink3)),
+          ],
+        ),
+      );
+
+  Widget _categoryCard(BuildContext context, Map<String, dynamic> item) {
+    final data = _itemData(item);
+    final title = _firstNonEmptyField(data, widget.titleKeys) ?? 'Untitled';
+    final subtitle = _firstNonEmptyField(data, widget.subtitleKeys);
+    final price = _firstNonEmptyField(data, widget.priceKeys);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => _showCategoryDetail(context, item, title),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: Icon(widget.icon, size: 18, color: AppColors.accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppFonts.body(size: 14, weight: FontWeight.w700, color: AppColors.ink)),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
+                    Text(subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (price != null)
+              Text(price, style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent)),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
           ],
         ),
       ),
     );
   }
 
-  Widget _docRow(KnowledgeViewModel vm, DocSource d) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 9),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(13), border: Border.all(color: AppColors.line)),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(9)),
-            alignment: Alignment.center,
-            child: Icon(businessIcon(d.isFile ? 'file' : 'doc'), size: 18, color: AppColors.accent),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
+  void _showCategoryDetail(BuildContext context, Map<String, dynamic> item, String title) {
+    final data = _itemData(item);
+    final fields = data.entries
+        .where((e) => !widget.titleKeys.any((k) => k.toLowerCase() == e.key.toLowerCase()))
+        .where((e) => e.value is String || e.value is num || e.value is bool)
+        .where((e) => e.value.toString().trim().isNotEmpty)
+        .take(10)
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 14, weight: FontWeight.w600, color: AppColors.ink)),
-                Text(d.meta, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: Icon(widget.icon, size: 20, color: AppColors.accent),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(title, style: AppFonts.display(size: 17))),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                if (fields.isEmpty)
+                  _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
+                else
+                  ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppColors.line2),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                  ),
+                ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: () => vm.removeDoc(d.id),
-            icon: Icon(Icons.delete_outline, color: AppColors.ink3, size: 20),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
+
+Map<String, dynamic> _itemData(Map<String, dynamic> item) =>
+    item['data'] is Map ? Map<String, dynamic>.from(item['data'] as Map) : <String, dynamic>{};
+
+String? _firstNonEmptyField(Map<String, dynamic> data, List<String> keys) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return null;
+}
+
+String _humanizeKey(String key) {
+  if (key.contains(' ')) return key;
+  final spaced = key.replaceAllMapped(RegExp(r'(?<=[a-z0-9])(?=[A-Z])'), (m) => ' ');
+  if (spaced.isEmpty) return key;
+  return spaced[0].toUpperCase() + spaced.substring(1);
+}
+
+Widget _detailRow(IconData icon, String label, String value) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: AppColors.ink3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                const SizedBox(height: 2),
+                Text(value, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );

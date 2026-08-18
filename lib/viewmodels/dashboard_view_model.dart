@@ -95,6 +95,140 @@ class DashboardViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  static final List<Map<String, dynamic>> _dummyProducts = [
+    {
+      'id': 'dummy-product-1',
+      'jobTypeName': 'Products',
+      'data': {
+        'Name': 'Hydrating Facial Kit',
+        'Price': '₹1,299',
+        'Category': 'Skincare',
+        'Description': 'At-home hydrating facial kit with serum, sheet mask and moisturizer.',
+      },
+    },
+    {
+      'id': 'dummy-product-2',
+      'jobTypeName': 'Products',
+      'data': {
+        'Name': 'Laser Hair Removal Package (5 sessions)',
+        'Price': '₹14,999',
+        'Category': 'Laser Treatment',
+        'Description': 'Prepaid package of 5 full-body laser hair removal sessions, valid for 6 months.',
+      },
+    },
+    {
+      'id': 'dummy-product-3',
+      'jobTypeName': 'Products',
+      'data': {
+        'Name': 'Anti-Aging Serum',
+        'Price': '₹2,499',
+        'Category': 'Skincare',
+        'Description': 'Retinol-based serum for fine lines, sold at the front desk.',
+      },
+    },
+    {
+      'id': 'dummy-product-4',
+      'jobTypeName': 'Products',
+      'data': {
+        'Name': 'Gift Voucher – ₹5,000',
+        'Price': '₹5,000',
+        'Category': 'Voucher',
+        'Description': 'Redeemable against any service or product at Cynosure Beauty Care.',
+      },
+    },
+  ];
+
+  static final List<Map<String, dynamic>> _dummyServices = [
+    {
+      'id': 'dummy-service-1',
+      'jobTypeName': 'Services',
+      'data': {
+        'Name': 'Classic Facial',
+        'Duration': '60 mins',
+        'Price': '₹1,499',
+        'Description': 'Deep-cleansing facial with steam, extraction and a soothing mask.',
+      },
+    },
+    {
+      'id': 'dummy-service-2',
+      'jobTypeName': 'Services',
+      'data': {
+        'Name': 'Laser Hair Removal – Full Body',
+        'Duration': '90 mins',
+        'Price': '₹3,999',
+        'Description': 'Single-session full-body laser hair removal treatment.',
+      },
+    },
+    {
+      'id': 'dummy-service-3',
+      'jobTypeName': 'Services',
+      'data': {
+        'Name': 'Bridal Makeup',
+        'Duration': '2 hrs',
+        'Price': '₹12,999',
+        'Description': 'Complete bridal makeup with a trial session included.',
+      },
+    },
+    {
+      'id': 'dummy-service-4',
+      'jobTypeName': 'Services',
+      'data': {
+        'Name': 'Hair Spa & Treatment',
+        'Duration': '45 mins',
+        'Price': '₹999',
+        'Description': 'Nourishing hair spa with scalp massage and deep conditioning.',
+      },
+    },
+  ];
+
+  static final List<Map<String, dynamic>> _dummyProviders = [
+    {
+      'id': 'dummy-provider-1',
+      'jobTypeName': 'Providers',
+      'data': {
+        'Name': 'Ananya Reddy',
+        'Role': 'Senior Aesthetician',
+        'Phone': '+91 98765 11220',
+        'Availability': 'Tue–Sun, 10am–7pm',
+      },
+    },
+    {
+      'id': 'dummy-provider-2',
+      'jobTypeName': 'Providers',
+      'data': {
+        'Name': 'Meera Kapoor',
+        'Role': 'Laser Treatment Specialist',
+        'Phone': '+91 98765 11221',
+        'Availability': 'Mon–Sat, 11am–8pm',
+      },
+    },
+    {
+      'id': 'dummy-provider-3',
+      'jobTypeName': 'Providers',
+      'data': {
+        'Name': 'Kavya Iyer',
+        'Role': 'Bridal Makeup Artist',
+        'Phone': '+91 98765 11222',
+        'Availability': 'By appointment',
+      },
+    },
+  ];
+
+  List<Map<String, dynamic>> get products {
+    final real = _subJobsOfType('Products');
+    return real.isNotEmpty ? real : _dummyProducts;
+  }
+
+  List<Map<String, dynamic>> get services {
+    final real = _subJobsOfType('Services');
+    return real.isNotEmpty ? real : _dummyServices;
+  }
+
+  List<Map<String, dynamic>> get providers {
+    final real = _subJobsOfType('Providers');
+    return real.isNotEmpty ? real : _dummyProviders;
+  }
+
   Future<void> _loadBusinessData() async {
     _businessData = await _sessionStorage.readBusinessData();
     notifyListeners();

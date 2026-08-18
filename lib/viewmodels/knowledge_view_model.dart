@@ -25,14 +25,19 @@ class KnowledgeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> addText(String title, String text) async {
+  Future<String?> addText(String title, String text, {String category = kDocCategoryGeneral}) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return 'Paste some text first';
-    await _workspace.addTextDoc(title.trim().isEmpty ? 'Note ${docs.length + 1}' : title.trim(), trimmed);
+    await _workspace.addTextDoc(
+        title.trim().isEmpty ? 'Note ${docs.length + 1}' : title.trim(), trimmed,
+        category: category);
     return null;
   }
 
-  Future<List<String>> addPickedFiles(List<(String name, Uint8List bytes, int size)> files) async {
+  Future<List<String>> addPickedFiles(
+    List<(String name, Uint8List bytes, int size)> files, {
+    String category = kDocCategoryGeneral,
+  }) async {
     _picking = true;
     notifyListeners();
     final warnings = <String>[];
@@ -49,7 +54,7 @@ class KnowledgeViewModel extends ChangeNotifier {
           warnings.add('$name could not be read as text');
           continue;
         }
-        await _workspace.addFileDoc(name, text, '${(size / 1024).toStringAsFixed(0)} KB');
+        await _workspace.addFileDoc(name, text, '${(size / 1024).toStringAsFixed(0)} KB', category: category);
       }
     } finally {
       _picking = false;

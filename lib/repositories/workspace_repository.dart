@@ -250,24 +250,26 @@ class WorkspaceRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addTextDoc(String name, String text) async {
+  Future<void> addTextDoc(String name, String text, {String category = kDocCategoryGeneral}) async {
     docs.add(DocSource(
       id: 'd${DateTime.now().millisecondsSinceEpoch}',
       name: name,
       text: text.length > 20000 ? text.substring(0, 20000) : text,
       meta: '${(text.length / 1000).toStringAsFixed(1)}k chars',
+      category: category,
     ));
     await _saveDocs();
     notifyListeners();
   }
 
-  Future<void> addFileDoc(String name, String text, String meta) async {
+  Future<void> addFileDoc(String name, String text, String meta, {String category = kDocCategoryGeneral}) async {
     docs.add(DocSource(
       id: 'd${DateTime.now().millisecondsSinceEpoch}${_rand.nextInt(9999)}',
       name: name,
       text: text.length > 20000 ? text.substring(0, 20000) : text,
       meta: meta,
       isFile: true,
+      category: category,
     ));
     await _saveDocs();
     notifyListeners();
