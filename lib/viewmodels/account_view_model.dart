@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../constants/app_constants.dart';
 import '../constants/server_urls.dart';
 import '../models/business_profile.dart';
 import '../models/user.dart';
@@ -42,11 +43,11 @@ class AccountViewModel extends ChangeNotifier {
       if (jobs == null || jobs.isEmpty) return;
       final job = jobs.first;
       if (job is! Map<String, dynamic>) return;
-      final subJobs = job['CreatedSubJobs'];
+      final subJobs = job[AppConstants.fieldCreatedSubJobs];
       if (subJobs is! List) return;
       _bookingCount = subJobs.whereType<Map>().where((j) {
-        final type = j['jobTypeName'];
-        return type is String && type.toLowerCase() == 'bookings';
+        final type = j[AppConstants.fieldJobTypeName];
+        return type is String && type.toLowerCase() == AppConstants.jobTypeBookings.toLowerCase();
       }).length;
       notifyListeners();
     } catch (e) {

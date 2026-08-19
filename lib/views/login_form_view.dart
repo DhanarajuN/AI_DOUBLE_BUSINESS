@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../repositories/auth_repository.dart';
@@ -33,13 +32,11 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
   final _formKey = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  late final TapGestureRecognizer _registerRecognizer;
   bool _rememberMe = false;
 
   @override
   void initState() {
     super.initState();
-    _registerRecognizer = TapGestureRecognizer()..onTap = _register;
     _loadRememberedCredentials();
   }
 
@@ -58,7 +55,6 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
   void dispose() {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
-    _registerRecognizer.dispose();
     super.dispose();
   }
 
@@ -100,11 +96,6 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: identity);
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-  }
-
-  void _register() {
-    FocusScope.of(context).unfocus();
-    Navigator.of(context).pushReplacementNamed(AppRoutes.signup);
   }
 
   @override
@@ -261,22 +252,6 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
                               Text('Continue with Google', style: AppFonts.body(size: 15, weight: FontWeight.w600, color: AppColors.ink)),
                             ],
                           ),
-                  ),
-                  const SizedBox(height: 26),
-                  Center(
-                    child: RichText(
-                      text: TextSpan(
-                        style: AppFonts.body(size: 13.5, color: AppColors.ink2),
-                        children: [
-                          const TextSpan(text: "Don't have an account? "),
-                          TextSpan(
-                            text: 'Register',
-                            style: AppFonts.body(size: 13.5, weight: FontWeight.w700, color: AppColors.accent),
-                            recognizer: _registerRecognizer,
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),

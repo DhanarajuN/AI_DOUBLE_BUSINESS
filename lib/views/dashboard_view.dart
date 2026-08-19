@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../constants/app_constants.dart';
 import '../models/plan.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
@@ -547,7 +548,7 @@ int _lifecycleIndexOf(String? status) {
 }
 
 String? orderStatusOf(Map<String, dynamic> order) {
-  final jobLevelStatus = order['Current_Job_Status'];
+  final jobLevelStatus = order[AppConstants.fieldCurrentJobStatus];
   if (jobLevelStatus is String && jobLevelStatus.trim().isNotEmpty) {
     return jobLevelStatus.trim();
   }

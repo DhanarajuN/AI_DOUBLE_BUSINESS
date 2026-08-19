@@ -29,6 +29,7 @@ class _LoginBody extends StatefulWidget {
 }
 
 class _LoginBodyState extends State<_LoginBody> {
+  static const _showGuestOption = false;
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   final _emailCtrl = TextEditingController();
@@ -177,25 +178,27 @@ class _LoginBodyState extends State<_LoginBody> {
                           : Text('Get started', style: AppFonts.body(size: 14.5, weight: FontWeight.w700, color: Colors.white)),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: TextButton(
-                      onPressed: vm.isLoading ? null : () => _continueAsGuest(vm),
-                      child: RichText(
-                        text: TextSpan(
-                          style: AppFonts.body(size: 13, color: AppColors.chromeTx),
-                          children: [
-                            const TextSpan(text: 'Just '),
-                            TextSpan(
-                              text: 'explore as a guest',
-                              style: AppFonts.body(size: 13, weight: FontWeight.w700, color: AppColors.accent2),
-                            ),
-                            const TextSpan(text: ' →'),
-                          ],
+                  if (_showGuestOption) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: TextButton(
+                        onPressed: vm.isLoading ? null : () => _continueAsGuest(vm),
+                        child: RichText(
+                          text: TextSpan(
+                            style: AppFonts.body(size: 13, color: AppColors.chromeTx),
+                            children: [
+                              const TextSpan(text: 'Just '),
+                              TextSpan(
+                                text: 'explore as a guest',
+                                style: AppFonts.body(size: 13, weight: FontWeight.w700, color: AppColors.accent2),
+                              ),
+                              const TextSpan(text: ' →'),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 22),
                   Text(
                     'By continuing you agree to the Terms and Privacy Policy.',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/business_category.dart';
 import '../models/channel.dart';
 import '../models/industry.dart';
 import '../models/plan.dart';
@@ -57,6 +58,15 @@ class _SignupBodyState extends State<_SignupBody> {
     vm.goToStep2();
   }
 
+  void _next2(SignupViewModel vm) {
+    final error = vm.validateStep2();
+    if (error != null) {
+      _warn(error);
+      return;
+    }
+    vm.goToStep3();
+  }
+
   void _warn(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
   }
@@ -68,7 +78,9 @@ class _SignupBodyState extends State<_SignupBody> {
   }
 
   void _handleBack(SignupViewModel vm) {
-    if (vm.step == 2) {
+    if (vm.step == 3) {
+      vm.goToStep2();
+    } else if (vm.step == 2) {
       vm.goToStep1();
     } else {
       Navigator.of(context).pushReplacementNamed(AppRoutes.login);
@@ -110,13 +122,20 @@ class _SignupBodyState extends State<_SignupBody> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: _stepBar(true)),
+                  Expanded(child: _stepBar(vm.step >= 1)),
                   const SizedBox(width: 6),
-                  Expanded(child: _stepBar(vm.step == 2)),
+                  Expanded(child: _stepBar(vm.step >= 2)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _stepBar(vm.step >= 3)),
                 ],
               ),
               const SizedBox(height: 20),
-              if (vm.step == 1) ..._buildStep1(vm) else ..._buildStep2(vm),
+              if (vm.step == 1)
+                ..._buildStep1(vm)
+              else if (vm.step == 2)
+                ..._buildStep2(vm)
+              else
+                ..._buildStep3(vm),
             ],
           ),
         ),
@@ -167,6 +186,133 @@ class _SignupBodyState extends State<_SignupBody> {
   }
 
   List<Widget> _buildStep2(SignupViewModel vm) {
+    final category = businessCategoryById(vm.businessCategoryId);
+    return [
+      Text('Business details', style: AppFonts.display(size: 24)),
+      const SizedBox(height: 6),
+      Text(
+        "Tell us what you offer and when you're open — this shapes what your AI Double can promise customers.",
+        style: AppFonts.body(size: 13.5, color: AppColors.ink2).copyWith(height: 1.5),
+      ),
+      const SizedBox(height: 20),
+      _label('Business category'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: kBusinessCategories.map((c) {
+          final on = vm.businessCategoryId == c.id;
+          return _chip(c.name, on, () => vm.pickBusinessCategory(c.id));
+        }).toList(),
+      ),
+      if (category != null) ...[
+        const SizedBox(height: 18),
+        _label('Business sub-category'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: category.subCategories.map((s) {
+            final on = vm.subCategories.contains(s);
+            return _chip(s, on, () => vm.toggleSubCategory(s));
+          }).toList(),
+        ),
+      ],
+      const SizedBox(height: 18),
+      _label('Availability days'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: kAvailabilityDays.map((d) {
+          final on = vm.availabilityDays.contains(d);
+          return _chip(d, on, () => vm.toggleAvailabilityDay(d));
+        }).toList(),
+      ),
+      const SizedBox(height: 18),
+      _label('Availability times'),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(child: _timeField(context, 'From', vm.availabilityFrom, vm.setAvailabilityFrom)),
+          const SizedBox(width: 10),
+          Expanded(child: _timeField(context, 'To', vm.availabilityTo, vm.setAvailabilityTo)),
+        ],
+      ),
+      const SizedBox(height: 18),
+      _label('Business type'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: kBusinessTypes.map((t) {
+          final on = vm.businessType == t;
+          return _chip(t, on, () => vm.pickBusinessType(t));
+        }).toList(),
+      ),
+      const SizedBox(height: 18),
+      _label('Primary goal'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: kPrimaryGoals.map((g) {
+          final on = vm.primaryGoal == g;
+          return _chip(g, on, () => vm.pickPrimaryGoal(g));
+        }).toList(),
+      ),
+      const SizedBox(height: 24),
+      Row(
+        children: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: AppColors.line2),
+              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+            ),
+            onPressed: vm.goToStep1,
+            child: Text('Back', style: AppFonts.body(size: 14.5, weight: FontWeight.w600, color: AppColors.ink)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: _primaryButton('Continue', Icons.arrow_forward, () => _next2(vm))),
+        ],
+      ),
+    ];
+  }
+
+  Widget _timeField(BuildContext context, String label, TimeOfDay? value, ValueChanged<TimeOfDay> onPicked) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(11),
+      onTap: () async {
+        final picked = await showTimePicker(context: context, initialTime: value ?? const TimeOfDay(hour: 9, minute: 0));
+        if (picked != null) onPicked(picked);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: AppColors.line2),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(value != null ? _fmtTime(value) : label, style: AppFonts.body(size: 14, color: value != null ? AppColors.ink : AppColors.ink3)),
+            Icon(Icons.access_time, size: 16, color: AppColors.ink3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _fmtTime(TimeOfDay t) {
+    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final m = t.minute.toString().padLeft(2, '0');
+    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  List<Widget> _buildStep3(SignupViewModel vm) {
     final c = kCurrencies[vm.region]!;
     final plans = kPlans.where((p) => p.id != 'enterprise').toList();
     return [
@@ -261,7 +407,7 @@ class _SignupBodyState extends State<_SignupBody> {
               padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
             ),
-            onPressed: vm.goToStep1,
+            onPressed: vm.goToStep2,
             child: Text('Back', style: AppFonts.body(size: 14.5, weight: FontWeight.w600, color: AppColors.ink)),
           ),
           const SizedBox(width: 10),

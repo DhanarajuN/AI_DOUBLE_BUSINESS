@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../constants/app_constants.dart';
 import '../constants/server_urls.dart';
 import '../models/business_profile.dart';
 import '../repositories/workspace_repository.dart';
@@ -29,8 +30,8 @@ class CalendarViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> get bookings => _subJobs
       .whereType<Map>()
       .where((j) {
-        final type = j['jobTypeName'];
-        return type is String && type.toLowerCase() == 'bookings';
+        final type = j[AppConstants.fieldJobTypeName];
+        return type is String && type.toLowerCase() == AppConstants.jobTypeBookings.toLowerCase();
       })
       .map((j) => Map<String, dynamic>.from(j))
       .toList();
@@ -45,7 +46,7 @@ class CalendarViewModel extends ChangeNotifier {
       if (jobs == null || jobs.isEmpty) return;
       final job = jobs.first;
       if (job is! Map<String, dynamic>) return;
-      final subJobs = job['CreatedSubJobs'];
+      final subJobs = job[AppConstants.fieldCreatedSubJobs];
       if (subJobs is List) {
         _subJobs = subJobs;
         notifyListeners();

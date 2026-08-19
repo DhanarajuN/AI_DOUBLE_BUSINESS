@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../constants/app_constants.dart';
 import '../constants/server_urls.dart';
 import '../models/business_profile.dart';
 import '../models/doc_source.dart';
@@ -27,63 +28,63 @@ class DashboardViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> _subJobsOfType(String jobTypeName) => _subJobs
       .whereType<Map>()
       .where((j) {
-        final type = j['jobTypeName'];
+        final type = j[AppConstants.fieldJobTypeName];
         return type is String && type.toLowerCase() == jobTypeName.toLowerCase();
       })
       .map((j) => Map<String, dynamic>.from(j))
       .toList();
 
-  List<Map<String, dynamic>> get bookings => _subJobsOfType('Bookings');
+  List<Map<String, dynamic>> get bookings => _subJobsOfType(AppConstants.jobTypeBookings);
   int get bookingsCount => bookings.length;
 
   static final List<Map<String, dynamic>> _dummyOrders = [
     {
       'id': 'dummy-order-1',
-      'jobTypeName': 'Orders',
+      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
       'createdAt': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
       'data': {'Customer Name': 'Aarav Sharma', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Accepted'},
     },
     {
       'id': 'dummy-order-2',
-      'jobTypeName': 'Orders',
+      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
       'createdAt': DateTime.now().subtract(const Duration(days: 1, hours: 2)).toIso8601String(),
       'data': {'Customer Name': 'Priya Nair', 'Product Name': 'Website Chat Widget', 'Amount': '₹1,499', 'Status': 'Delivered'},
     },
     {
       'id': 'dummy-order-3',
-      'jobTypeName': 'Orders',
+      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
       'createdAt': DateTime.now().subtract(const Duration(days: 2, hours: 5)).toIso8601String(),
       'data': {'Customer Name': 'Rohan Gupta', 'Product Name': 'WhatsApp Integration', 'Amount': '₹2,999', 'Status': 'In Transit'},
     },
     {
       'id': 'dummy-order-4',
-      'jobTypeName': 'Orders',
+      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
       'createdAt': DateTime.now().subtract(const Duration(hours: 20)).toIso8601String(),
       'data': {'Customer Name': 'Neha Iyer', 'Product Name': 'Calendar Booking Setup', 'Amount': '₹1,999', 'Status': 'Placed'},
     },
     {
       'id': 'dummy-order-5',
-      'jobTypeName': 'Orders',
+      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
       'createdAt': DateTime.now().subtract(const Duration(days: 10)).toIso8601String(),
       'data': {'Customer Name': 'Karthik Rao', 'Product Name': 'Knowledge Base Import', 'Amount': '₹3,499', 'Status': 'Delivered'},
     },
     {
       'id': 'dummy-order-6',
-      'jobTypeName': 'Orders',
+      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
       'createdAt': DateTime.now().subtract(const Duration(days: 40)).toIso8601String(),
       'data': {'Customer Name': 'Divya Menon', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Cancelled'},
     },
   ];
 
   List<Map<String, dynamic>> get orders {
-    final real = _subJobsOfType('Orders');
+    final real = _subJobsOfType(AppConstants.jobTypeOrders);
     return real.isNotEmpty ? real : _dummyOrders;
   }
 
   int get ordersCount => orders.length;
 
   void updateOrderStatus(Map<String, dynamic> order, String status) {
-    order['Current_Job_Status'] = status;
+    order[AppConstants.fieldCurrentJobStatus] = status;
 
     var data = order['data'];
     if (data is! Map) {
@@ -104,7 +105,7 @@ class DashboardViewModel extends ChangeNotifier {
   final _services = _CatalogPage();
   final _providers = _CatalogPage();
   String? _catalogEmail;
-  String _providersTypeName = 'Providers';
+  String _providersTypeName = AppConstants.jobTypeProviders;
 
   List<Map<String, dynamic>> get products => _products.items;
   List<Map<String, dynamic>> get services => _services.items;
@@ -118,8 +119,8 @@ class DashboardViewModel extends ChangeNotifier {
   bool get servicesLoadingMore => _services.loadingMore;
   bool get providersLoadingMore => _providers.loadingMore;
 
-  Future<void> loadMoreProducts() => _loadMore(_products, 'Products');
-  Future<void> loadMoreServices() => _loadMore(_services, 'Services');
+  Future<void> loadMoreProducts() => _loadMore(_products, AppConstants.jobTypeProducts);
+  Future<void> loadMoreServices() => _loadMore(_services, AppConstants.jobTypeServices);
   Future<void> loadMoreProviders() => _loadMore(_providers, _providersTypeName);
 
   Future<void> _loadBusinessData() async {
@@ -138,14 +139,14 @@ class DashboardViewModel extends ChangeNotifier {
     final data = _businessData;
     final email = data == null
         ? null
-        : (data['Business Email'] ?? data['Work Email']) as String?;
+        : (data[AppConstants.fieldBusinessEmail] ?? data['Work Email']) as String?;
     if (email == null || email.trim().isEmpty) return;
     _catalogEmail = email;
     _providersTypeName = _providersJobTypeName(data?['Business Category'] as String?);
 
     await Future.wait([
-      _fetchFirstPage(_products, 'Products'),
-      _fetchFirstPage(_services, 'Services'),
+      _fetchFirstPage(_products, AppConstants.jobTypeProducts),
+      _fetchFirstPage(_services, AppConstants.jobTypeServices),
       _fetchFirstPage(_providers, _providersTypeName),
     ]);
     notifyListeners();
@@ -183,7 +184,7 @@ class DashboardViewModel extends ChangeNotifier {
       case 'insurance':
         return 'Brokers';
       default:
-        return 'Providers';
+        return AppConstants.jobTypeProviders;
     }
   }
 
@@ -197,7 +198,7 @@ class DashboardViewModel extends ChangeNotifier {
           'pageSize': '$_kCatalogPageSize',
           'filters': jsonEncode([
             {'fieldName': 'parentJobInstanceId', 'condition': 'is', 'value': ''},
-            {'fieldName': 'Business Email', 'condition': 'contains', 'value': email},
+            {'fieldName': AppConstants.fieldBusinessEmail, 'condition': 'contains', 'value': email},
           ]),
         },
       );
@@ -226,7 +227,7 @@ class DashboardViewModel extends ChangeNotifier {
       if (jobs == null || jobs.isEmpty) return;
       final job = jobs.first;
       if (job is! Map<String, dynamic>) return;
-      final subJobs = job['CreatedSubJobs'];
+      final subJobs = job[AppConstants.fieldCreatedSubJobs];
       if (subJobs is List) {
         _subJobs = subJobs;
         AppLogger.i('DashboardVM', 'Loaded ${subJobs.length} sub jobs');

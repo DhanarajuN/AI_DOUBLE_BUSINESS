@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 
@@ -13,6 +13,27 @@ class SignupViewModel extends ChangeNotifier {
 
   String? _industryId;
   String? get industryId => _industryId;
+
+  String? _businessCategoryId;
+  String? get businessCategoryId => _businessCategoryId;
+
+  final Set<String> _subCategories = {};
+  Set<String> get subCategories => _subCategories;
+
+  final Set<String> _availabilityDays = {};
+  Set<String> get availabilityDays => _availabilityDays;
+
+  TimeOfDay? _availabilityFrom;
+  TimeOfDay? get availabilityFrom => _availabilityFrom;
+
+  TimeOfDay? _availabilityTo;
+  TimeOfDay? get availabilityTo => _availabilityTo;
+
+  String? _businessType;
+  String? get businessType => _businessType;
+
+  String? _primaryGoal;
+  String? get primaryGoal => _primaryGoal;
 
   String _size = '';
   String get size => _size;
@@ -30,6 +51,42 @@ class SignupViewModel extends ChangeNotifier {
 
   void pickIndustry(String id) {
     _industryId = id;
+    notifyListeners();
+  }
+
+  void pickBusinessCategory(String id) {
+    _businessCategoryId = id;
+    _subCategories.clear();
+    notifyListeners();
+  }
+
+  void toggleSubCategory(String name) {
+    if (!_subCategories.remove(name)) _subCategories.add(name);
+    notifyListeners();
+  }
+
+  void toggleAvailabilityDay(String day) {
+    if (!_availabilityDays.remove(day)) _availabilityDays.add(day);
+    notifyListeners();
+  }
+
+  void setAvailabilityFrom(TimeOfDay time) {
+    _availabilityFrom = time;
+    notifyListeners();
+  }
+
+  void setAvailabilityTo(TimeOfDay time) {
+    _availabilityTo = time;
+    notifyListeners();
+  }
+
+  void pickBusinessType(String type) {
+    _businessType = type;
+    notifyListeners();
+  }
+
+  void pickPrimaryGoal(String goal) {
+    _primaryGoal = goal;
     notifyListeners();
   }
 
@@ -54,13 +111,24 @@ class SignupViewModel extends ChangeNotifier {
     return null;
   }
 
+  String? validateStep2() {
+    if (_businessCategoryId == null) return 'Pick your business category';
+    if (_subCategories.isEmpty) return 'Pick at least one sub-category';
+    return null;
+  }
+
+  void goToStep1() {
+    _step = 1;
+    notifyListeners();
+  }
+
   void goToStep2() {
     _step = 2;
     notifyListeners();
   }
 
-  void goToStep1() {
-    _step = 1;
+  void goToStep3() {
+    _step = 3;
     notifyListeners();
   }
 
