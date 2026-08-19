@@ -1,41 +1,38 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../models/job_type_schema.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
+import '../services/api_client.dart';
+import '../services/job_type_schema_service.dart';
+
+const _kBusinessSchemaTestToken =
+    'eyJhbGciOiJIUzUxMiJ9.eyJqdGkiOiJvbmdvLWp3dCIsInN1YiI6ImFpZG91YmxlQGdvc3VyZS5haSIsImF1dGhvcml0aWVzIjpbXSwidGVuYW50IjoiYWlkb3VibGUiLCJvcmdJZCI6IjY5YzI4MDAzYjI2M2RkMDNiYzkyZDIxMCIsInJvbGVOYW1lIjoiU3ViIEFkbWluIiwidXNlcklkIjoiNjljMjgwMDNiMjYzZGQwM2JjOTJkMjE1IiwiaWF0IjoxNzg3MTE4MTI3LCJleHAiOjE3ODc3MjI5Mjd9.o8nNYbGimxOiuEQY8ZydlMhccMv-PxkVaz4s34WQZ1largaN5vCz0dFTkYs9s3DrNT79WUjVM42BUqlO8wDFaA';
 
 class SignupViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final WorkspaceRepository _workspaceRepository;
+  final ApiClient _apiClient;
 
-  SignupViewModel(this._authRepository, this._workspaceRepository);
+  SignupViewModel(this._authRepository, this._workspaceRepository, this._apiClient) {
+    _loadSchema();
+  }
 
-  int _step = 1;
+  int _step = 0;
   int get step => _step;
 
-  String? _industryId;
-  String? get industryId => _industryId;
+  JobTypeSchema? _schema;
+  JobTypeSchema? get schema => _schema;
 
-  String? _businessCategoryId;
-  String? get businessCategoryId => _businessCategoryId;
+  bool _loadingSchema = false;
+  bool get loadingSchema => _loadingSchema;
 
-  final Set<String> _subCategories = {};
-  Set<String> get subCategories => _subCategories;
+  bool _schemaFailed = false;
+  bool get schemaFailed => _schemaFailed;
 
-  final Set<String> _availabilityDays = {};
-  Set<String> get availabilityDays => _availabilityDays;
+  final Map<String, dynamic> _values = {};
+  dynamic valueOf(String fieldName) => _values[fieldName];
 
-  TimeOfDay? _availabilityFrom;
-  TimeOfDay? get availabilityFrom => _availabilityFrom;
-
-  TimeOfDay? _availabilityTo;
-  TimeOfDay? get availabilityTo => _availabilityTo;
-
-  String? _businessType;
-  String? get businessType => _businessType;
-
-  String? _primaryGoal;
-  String? get primaryGoal => _primaryGoal;
-
-  String _size = '';
+  final String _size = '';
   String get size => _size;
 
   String _region = 'in';
@@ -47,53 +44,86 @@ class SignupViewModel extends ChangeNotifier {
   bool _submitting = false;
   bool get submitting => _submitting;
 
-  String? get initialOwnerName => _authRepository.currentUser?.name;
+  static const _kSkipTypes = {'SubJob'};
 
-  void pickIndustry(String id) {
-    _industryId = id;
+  List<String> get groupNames {
+    final s = _schema;
+    if (s == null) return const [];
+    final seen = <String>[];
+    for (final f in s.fields) {
+      if (_kSkipTypes.contains(f.type) || f.groupName.isEmpty) continue;
+      if (!seen.contains(f.groupName)) seen.add(f.groupName);
+    }
+    return seen;
+  }
+
+  List<JobTypeField> fieldsForGroup(String group) {
+    final s = _schema;
+    if (s == null) return const [];
+    return s.fieldsInGroup(group).where((f) => !_kSkipTypes.contains(f.type)).toList();
+  }
+
+  int get totalSteps => groupNames.length + 1;
+
+  String? _parentFieldNameOf(JobTypeField field) {
+    final s = _schema;
+    if (s == null) return null;
+    for (final f in s.fields) {
+      if (f.dependentFields == field.name) return f.name;
+    }
+    return null;
+  }
+
+  List<String> optionsForField(JobTypeField field) {
+    final s = _schema;
+    if (s == null) return const [];
+    final parentName = _parentFieldNameOf(field);
+    final parentValue = parentName == null ? null : _values[parentName] as String?;
+    return s.optionsFor(field, parentSelectionLabel: parentValue);
+  }
+
+  void setTextValue(String fieldName, String value) {
+    _values[fieldName] = value;
     notifyListeners();
   }
 
-  void pickBusinessCategory(String id) {
-    _businessCategoryId = id;
-    _subCategories.clear();
+  void pickSingleValue(JobTypeField field, String value) {
+    _values[field.name] = value;
+    _clearDependents(field.name);
     notifyListeners();
   }
 
-  void toggleSubCategory(String name) {
-    if (!_subCategories.remove(name)) _subCategories.add(name);
+  void toggleMultiValue(JobTypeField field, String option) {
+    final current = Set<String>.from((_values[field.name] as Set<String>?) ?? const <String>{});
+    if (!current.remove(option)) current.add(option);
+    _values[field.name] = current;
     notifyListeners();
   }
 
-  void toggleAvailabilityDay(String day) {
-    if (!_availabilityDays.remove(day)) _availabilityDays.add(day);
+  void _clearDependents(String fieldName) {
+    final s = _schema;
+    if (s == null) return;
+    for (final f in s.fields) {
+      if (f.dependentFields == fieldName) _values.remove(f.name);
+    }
+  }
+
+  Future<void> _loadSchema() async {
+    _loadingSchema = true;
+    _schemaFailed = false;
+    notifyListeners();
+    final result = await fetchJobTypeSchema(_apiClient, 'Business', bearerTokenOverride: _kBusinessSchemaTestToken);
+    _schema = result;
+    _schemaFailed = result == null;
+    if (result != null && result.fieldNamed('Work Email') != null && _values['Work Email'] == null) {
+      final email = _authRepository.currentUser?.username;
+      if (email != null && email.isNotEmpty) _values['Work Email'] = email;
+    }
+    _loadingSchema = false;
     notifyListeners();
   }
 
-  void setAvailabilityFrom(TimeOfDay time) {
-    _availabilityFrom = time;
-    notifyListeners();
-  }
-
-  void setAvailabilityTo(TimeOfDay time) {
-    _availabilityTo = time;
-    notifyListeners();
-  }
-
-  void pickBusinessType(String type) {
-    _businessType = type;
-    notifyListeners();
-  }
-
-  void pickPrimaryGoal(String goal) {
-    _primaryGoal = goal;
-    notifyListeners();
-  }
-
-  void pickSize(String s) {
-    _size = s;
-    notifyListeners();
-  }
+  Future<void> retryLoadSchema() => _loadSchema();
 
   void pickRegion(String r) {
     _region = r;
@@ -105,41 +135,49 @@ class SignupViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? validateStep1(String businessName) {
-    if (businessName.trim().isEmpty) return 'Enter your business name';
-    if (_industryId == null) return 'Pick your industry';
+  String? _mandatoryErrorFor(JobTypeField field) {
+    if (!field.mandatory) return null;
+    final value = _values[field.name];
+    final isEmpty = value == null ||
+        (value is String && value.trim().isEmpty) ||
+        (value is Set && value.isEmpty);
+    return isEmpty ? '${field.label} is required' : null;
+  }
+
+  String? validateGroup(String group) {
+    for (final f in fieldsForGroup(group)) {
+      final error = _mandatoryErrorFor(f);
+      if (error != null) return error;
+    }
     return null;
   }
 
-  String? validateStep2() {
-    if (_businessCategoryId == null) return 'Pick your business category';
-    if (_subCategories.isEmpty) return 'Pick at least one sub-category';
-    return null;
-  }
-
-  void goToStep1() {
-    _step = 1;
+  void goToStep(int index) {
+    _step = index;
     notifyListeners();
   }
 
-  void goToStep2() {
-    _step = 2;
-    notifyListeners();
+  void nextStep() {
+    if (_step < totalSteps - 1) goToStep(_step + 1);
   }
 
-  void goToStep3() {
-    _step = 3;
-    notifyListeners();
+  void prevStep() {
+    if (_step > 0) goToStep(_step - 1);
   }
 
-  Future<void> complete({required String name, required String owner}) async {
+  Future<void> complete() async {
     _submitting = true;
     notifyListeners();
+    final businessName = ((_values['Business Name'] as String?) ?? '').trim();
+    final firstName = ((_values['First Name'] as String?) ?? '').trim();
+    final lastName = ((_values['Last Name'] as String?) ?? '').trim();
+    final owner = [firstName, lastName].where((s) => s.isNotEmpty).join(' ');
+    final category = _values['Business Category'] as String?;
     await _workspaceRepository.completeSignup(
-      name: name.trim(),
-      owner: owner.trim(),
+      name: businessName,
+      owner: owner.isNotEmpty ? owner : (_authRepository.currentUser?.name ?? ''),
       email: _authRepository.currentUser?.username ?? '',
-      industryId: _industryId!,
+      industryId: category ?? 'other',
       size: _size,
       planId: _planId,
       region: _region,

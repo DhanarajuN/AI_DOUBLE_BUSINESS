@@ -1,12 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../constants/server_urls.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../services/api_client.dart';
-import '../services/app_logger.dart';
+import '../services/business_lookup_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
@@ -46,67 +44,13 @@ class _SplashViewState extends State<SplashView> {
         await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: user?.username ?? '');
         if (!mounted) return;
       }
-      await _businessInformation(authRepository.currentUser?.username);
+      await resolveBusinessForEmail(
+        context.read<SessionStorage>(),
+        context.read<ApiClient>(),
+        authRepository.currentUser?.username,
+      );
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-    }
-  }
-
-  Future<void> _businessInformation(String? email) async {
-    final sessionStorage = context.read<SessionStorage>();
-    final apiClient = context.read<ApiClient>();
-    final cached = await sessionStorage.readBusinessId();
-    AppLogger.i('Splash', 'Business lookup check — cached businessId: ${cached ?? 'none'}');
-
-    final wanted = email?.trim().toLowerCase();
-    if (wanted == null || wanted.isEmpty) {
-      AppLogger.w('Splash', 'No signed-in email, skipping business lookup');
-      return;
-    }
-
-    AppLogger.i('Splash', 'Looking up business for $wanted');
-    try {
-      final result = await apiClient.get(
-        ServerUrls.businessInstances,
-        query: {
-          'pageNumber': '1',
-          'pageSize': '10',
-          'filters': jsonEncode([
-            {'fieldName': 'parentJobInstanceId', 'condition': 'is', 'value': ''},
-            {'fieldName': 'Work Email', 'condition': 'contains', 'value': wanted},
-          ]),
-        },
-      );
-      if (result is! Map<String, dynamic>) {
-        AppLogger.w('Splash', 'Unexpected business lookup response: $result');
-        return;
-      }
-      final jobs = result['jobs'] as List?;
-      if (jobs == null || jobs.isEmpty) {
-        AppLogger.w('Splash', 'No business found for $wanted');
-        return;
-      }
-      final job = jobs.first;
-      if (job is! Map<String, dynamic>) {
-        AppLogger.w('Splash', 'Unexpected business record shape: $job');
-        return;
-      }
-      final id = job['id'] as String?;
-      if (id != null && id.isNotEmpty) {
-        await sessionStorage.saveBusinessId(id);
-        AppLogger.i('Splash', 'Resolved businessId: $id');
-      } else {
-        AppLogger.w('Splash', 'Business record had no id: $job');
-      }
-      final data = job['data'];
-      if (data is Map<String, dynamic> && data.isNotEmpty) {
-        await sessionStorage.saveBusinessData(data);
-        AppLogger.i('Splash', 'Captured business data fields: ${data.keys.toList()}');
-      } else {
-        AppLogger.w('Splash', 'Business record had no data captured');
-      }
-    } catch (e) {
-      AppLogger.w('Splash', 'Could not resolve businessId: $e');
     }
   }
 

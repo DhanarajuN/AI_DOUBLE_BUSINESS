@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
+import '../services/api_client.dart';
+import '../services/business_lookup_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/login_view_model.dart';
@@ -94,6 +96,8 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     final workspace = context.read<WorkspaceRepository>();
     await workspace.ensureBusinessBelongsTo(identity);
     await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: identity);
+    if (!mounted) return;
+    await resolveBusinessForEmail(context.read<SessionStorage>(), context.read<ApiClient>(), identity);
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
   }

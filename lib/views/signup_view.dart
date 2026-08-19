@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/business_category.dart';
-import '../models/channel.dart';
-import '../models/industry.dart';
+import '../models/job_type_schema.dart';
 import '../models/plan.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
+import '../services/api_client.dart';
+import '../services/business_lookup_service.dart';
+import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/signup_view_model.dart';
 import '../widgets/app_logo.dart';
-import '../widgets/business_icons.dart';
 
 class SignupView extends StatelessWidget {
   const SignupView({super.key});
@@ -18,7 +18,7 @@ class SignupView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) => SignupViewModel(ctx.read<AuthRepository>(), ctx.read<WorkspaceRepository>()),
+      create: (ctx) => SignupViewModel(ctx.read<AuthRepository>(), ctx.read<WorkspaceRepository>(), ctx.read<ApiClient>()),
       child: const _SignupBody(),
     );
   }
@@ -32,56 +32,47 @@ class _SignupBody extends StatefulWidget {
 }
 
 class _SignupBodyState extends State<_SignupBody> {
-  final _nameCtrl = TextEditingController();
-  final _ownerCtrl = TextEditingController();
+  final _dynamicCtrls = <String, TextEditingController>{};
 
-  @override
-  void initState() {
-    super.initState();
-    final owner = context.read<SignupViewModel>().initialOwnerName;
-    if (owner != null) _ownerCtrl.text = owner;
-  }
+  TextEditingController _ctrlFor(String fieldName, {String initial = ''}) =>
+      _dynamicCtrls.putIfAbsent(fieldName, () => TextEditingController(text: initial));
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _ownerCtrl.dispose();
+    for (final c in _dynamicCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
-  }
-
-  void _next(SignupViewModel vm) {
-    final error = vm.validateStep1(_nameCtrl.text);
-    if (error != null) {
-      _warn(error);
-      return;
-    }
-    vm.goToStep2();
-  }
-
-  void _next2(SignupViewModel vm) {
-    final error = vm.validateStep2();
-    if (error != null) {
-      _warn(error);
-      return;
-    }
-    vm.goToStep3();
   }
 
   void _warn(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
   }
 
+  void _nextGroup(SignupViewModel vm, String group) {
+    final error = vm.validateGroup(group);
+    if (error != null) {
+      _warn(error);
+      return;
+    }
+    vm.nextStep();
+  }
+
   Future<void> _complete(SignupViewModel vm) async {
-    await vm.complete(name: _nameCtrl.text, owner: _ownerCtrl.text);
+    await vm.complete();
+    if (!mounted) return;
+    await resolveBusinessForEmail(
+      context.read<SessionStorage>(),
+      context.read<ApiClient>(),
+      context.read<AuthRepository>().currentUser?.username,
+    );
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
   }
 
   void _handleBack(SignupViewModel vm) {
-    if (vm.step == 3) {
-      vm.goToStep2();
-    } else if (vm.step == 2) {
-      vm.goToStep1();
+    if (vm.step > 0) {
+      vm.prevStep();
     } else {
       Navigator.of(context).pushReplacementNamed(AppRoutes.login);
     }
@@ -97,222 +88,191 @@ class _SignupBodyState extends State<_SignupBody> {
         _handleBack(vm);
       },
       child: Scaffold(
-      backgroundColor: AppColors.paper2,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const AppLogoMark(size: 22),
-                  const SizedBox(width: 9),
-                  RichText(
-                    text: TextSpan(
-                      style: AppFonts.display(size: 16, color: AppColors.ink),
-                      children: [
-                        const TextSpan(text: 'AI '),
-                        TextSpan(text: 'Double', style: AppFonts.display(size: 16, weight: FontWeight.w800, color: AppColors.accent)),
-                      ],
+        backgroundColor: AppColors.paper2,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const AppLogoMark(size: 22),
+                    const SizedBox(width: 9),
+                    RichText(
+                      text: TextSpan(
+                        style: AppFonts.display(size: 16, color: AppColors.ink),
+                        children: [
+                          const TextSpan(text: 'AI '),
+                          TextSpan(text: 'Double', style: AppFonts.display(size: 16, weight: FontWeight.w800, color: AppColors.accent)),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: _stepBar(vm.step >= 1)),
-                  const SizedBox(width: 6),
-                  Expanded(child: _stepBar(vm.step >= 2)),
-                  const SizedBox(width: 6),
-                  Expanded(child: _stepBar(vm.step >= 3)),
-                ],
-              ),
-              const SizedBox(height: 20),
-              if (vm.step == 1)
-                ..._buildStep1(vm)
-              else if (vm.step == 2)
-                ..._buildStep2(vm)
-              else
-                ..._buildStep3(vm),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _stepBarRow(vm),
+                const SizedBox(height: 20),
+                ..._buildCurrentStep(vm),
+              ],
+            ),
           ),
         ),
       ),
-      ),
+    );
+  }
+
+  Widget _stepBarRow(SignupViewModel vm) {
+    final total = vm.totalSteps;
+    return Row(
+      children: [
+        for (var i = 0; i < total; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(child: _stepBar(vm.step >= i)),
+        ],
+      ],
     );
   }
 
   Widget _stepBar(bool on) => Container(height: 4, decoration: BoxDecoration(color: on ? AppColors.accent : AppColors.line2, borderRadius: BorderRadius.circular(2)));
 
-  List<Widget> _buildStep1(SignupViewModel vm) {
-    return [
-      Text('Set up your workspace', style: AppFonts.display(size: 24)),
-      const SizedBox(height: 6),
-      Text(
-        "Your AI Double is tailored to your industry — the services it books and the questions it expects.",
-        style: AppFonts.body(size: 13.5, color: AppColors.ink2).copyWith(height: 1.5),
-      ),
-      const SizedBox(height: 20),
-      _label('Business name'),
-      _textField(_nameCtrl, 'e.g. Sunrise Insurance'),
-      const SizedBox(height: 14),
-      _label('Your name'),
-      _textField(_ownerCtrl, 'Your full name'),
-      const SizedBox(height: 14),
-      _label('Which industry are you in?'),
-      const SizedBox(height: 8),
-      GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 2.6,
-        children: kIndustries.map((i) {
-          final on = vm.industryId == i.id;
-          return _tile(
-            onTap: () => vm.pickIndustry(i.id),
-            on: on,
-            icon: businessIcon(i.iconKey),
-            label: i.name,
-          );
-        }).toList(),
-      ),
-      const SizedBox(height: 24),
-      _primaryButton('Continue', Icons.arrow_forward, () => _next(vm)),
-    ];
-  }
-
-  List<Widget> _buildStep2(SignupViewModel vm) {
-    final category = businessCategoryById(vm.businessCategoryId);
-    return [
-      Text('Business details', style: AppFonts.display(size: 24)),
-      const SizedBox(height: 6),
-      Text(
-        "Tell us what you offer and when you're open — this shapes what your AI Double can promise customers.",
-        style: AppFonts.body(size: 13.5, color: AppColors.ink2).copyWith(height: 1.5),
-      ),
-      const SizedBox(height: 20),
-      _label('Business category'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: kBusinessCategories.map((c) {
-          final on = vm.businessCategoryId == c.id;
-          return _chip(c.name, on, () => vm.pickBusinessCategory(c.id));
-        }).toList(),
-      ),
-      if (category != null) ...[
-        const SizedBox(height: 18),
-        _label('Business sub-category'),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: category.subCategories.map((s) {
-            final on = vm.subCategories.contains(s);
-            return _chip(s, on, () => vm.toggleSubCategory(s));
-          }).toList(),
-        ),
-      ],
-      const SizedBox(height: 18),
-      _label('Availability days'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: kAvailabilityDays.map((d) {
-          final on = vm.availabilityDays.contains(d);
-          return _chip(d, on, () => vm.toggleAvailabilityDay(d));
-        }).toList(),
-      ),
-      const SizedBox(height: 18),
-      _label('Availability times'),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(child: _timeField(context, 'From', vm.availabilityFrom, vm.setAvailabilityFrom)),
-          const SizedBox(width: 10),
-          Expanded(child: _timeField(context, 'To', vm.availabilityTo, vm.setAvailabilityTo)),
-        ],
-      ),
-      const SizedBox(height: 18),
-      _label('Business type'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: kBusinessTypes.map((t) {
-          final on = vm.businessType == t;
-          return _chip(t, on, () => vm.pickBusinessType(t));
-        }).toList(),
-      ),
-      const SizedBox(height: 18),
-      _label('Primary goal'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: kPrimaryGoals.map((g) {
-          final on = vm.primaryGoal == g;
-          return _chip(g, on, () => vm.pickPrimaryGoal(g));
-        }).toList(),
-      ),
-      const SizedBox(height: 24),
-      Row(
-        children: [
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppColors.line2),
-              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-            ),
-            onPressed: vm.goToStep1,
-            child: Text('Back', style: AppFonts.body(size: 14.5, weight: FontWeight.w600, color: AppColors.ink)),
+  List<Widget> _buildCurrentStep(SignupViewModel vm) {
+    if (vm.schema == null) {
+      if (vm.loadingSchema) {
+        return const [
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
           ),
-          const SizedBox(width: 10),
-          Expanded(child: _primaryButton('Continue', Icons.arrow_forward, () => _next2(vm))),
+        ];
+      }
+      if (vm.schemaFailed) {
+        return [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.line)),
+            child: Column(
+              children: [
+                Text("Couldn't load the signup form.", style: AppFonts.body(size: 13.5, color: AppColors.ink2)),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: vm.retryLoadSchema,
+                  child: Text('Retry', style: AppFonts.body(size: 13, weight: FontWeight.w600, color: AppColors.accent)),
+                ),
+              ],
+            ),
+          ),
+        ];
+      }
+      return const [];
+    }
+
+    final groups = vm.groupNames;
+    if (vm.step < groups.length) {
+      return _buildGroupStep(vm, groups[vm.step]);
+    }
+    return _buildPlanStep(vm);
+  }
+
+  List<Widget> _buildGroupStep(SignupViewModel vm, String group) {
+    final fields = vm.fieldsForGroup(group);
+    return [
+      Text(group, style: AppFonts.display(size: 24)),
+      const SizedBox(height: 20),
+      ...fields.map((f) => _fieldWidget(vm, f)),
+      const SizedBox(height: 24),
+      Row(
+        children: [
+          if (vm.step > 0) ...[
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppColors.line2),
+                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+              ),
+              onPressed: vm.prevStep,
+              child: Text('Back', style: AppFonts.body(size: 14.5, weight: FontWeight.w600, color: AppColors.ink)),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(child: _primaryButton('Continue', Icons.arrow_forward, () => _nextGroup(vm, group))),
         ],
       ),
     ];
   }
 
-  Widget _timeField(BuildContext context, String label, TimeOfDay? value, ValueChanged<TimeOfDay> onPicked) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(11),
-      onTap: () async {
-        final picked = await showTimePicker(context: context, initialTime: value ?? const TimeOfDay(hour: 9, minute: 0));
-        if (picked != null) onPicked(picked);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(color: AppColors.line2),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(value != null ? _fmtTime(value) : label, style: AppFonts.body(size: 14, color: value != null ? AppColors.ink : AppColors.ink3)),
-            Icon(Icons.access_time, size: 16, color: AppColors.ink3),
-          ],
-        ),
+  Widget _fieldWidget(SignupViewModel vm, JobTypeField field) {
+    if (field.type == 'Selection') return _selectionField(vm, field);
+    return _dynamicTextField(vm, field);
+  }
+
+  Widget _selectionField(SignupViewModel vm, JobTypeField field) {
+    final options = vm.optionsForField(field);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(field.label, mandatory: field.mandatory),
+          const SizedBox(height: 8),
+          if (options.isEmpty)
+            Text('No options available.', style: AppFonts.body(size: 12.5, color: AppColors.ink3))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: options.map((o) {
+                final on = field.multiselect
+                    ? ((vm.valueOf(field.name) as Set<String>?)?.contains(o) ?? false)
+                    : vm.valueOf(field.name) == o;
+                return _chip(o, on, () => field.multiselect ? vm.toggleMultiValue(field, o) : vm.pickSingleValue(field, o));
+              }).toList(),
+            ),
+        ],
       ),
     );
   }
 
-  String _fmtTime(TimeOfDay t) {
-    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
-    final m = t.minute.toString().padLeft(2, '0');
-    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$h:$m $period';
+  Widget _dynamicTextField(SignupViewModel vm, JobTypeField field) {
+    final ctrl = _ctrlFor(field.name, initial: (vm.valueOf(field.name) as String?) ?? '');
+    final keyboardType = field.type == 'Email'
+        ? TextInputType.emailAddress
+        : field.type == 'Numeric Text'
+            ? TextInputType.number
+            : TextInputType.text;
+    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(field.label, mandatory: field.mandatory),
+          Padding(
+            padding: const EdgeInsets.only(top: 7),
+            child: TextField(
+              controller: ctrl,
+              keyboardType: keyboardType,
+              maxLines: field.name.toLowerCase().contains('description') ? 3 : 1,
+              onChanged: (v) => vm.setTextValue(field.name, v),
+              style: AppFonts.body(size: 14.5, color: AppColors.ink),
+              decoration: InputDecoration(
+                hintText: field.label,
+                hintStyle: AppFonts.body(size: 14, color: AppColors.ink3),
+                filled: true,
+                fillColor: AppColors.card,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                border: border,
+                enabledBorder: border,
+                focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  List<Widget> _buildStep3(SignupViewModel vm) {
+  List<Widget> _buildPlanStep(SignupViewModel vm) {
     final c = kCurrencies[vm.region]!;
     final plans = kPlans.where((p) => p.id != 'enterprise').toList();
     return [
@@ -323,17 +283,6 @@ class _SignupBodyState extends State<_SignupBody> {
         style: AppFonts.body(size: 13.5, color: AppColors.ink2).copyWith(height: 1.5),
       ),
       const SizedBox(height: 20),
-      _label('Team size'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: kTeamSizes.map((s) {
-          final on = vm.size == s;
-          return _chip(s, on, () => vm.pickSize(s));
-        }).toList(),
-      ),
-      const SizedBox(height: 18),
       _label('Billing region'),
       const SizedBox(height: 8),
       Wrap(
@@ -407,7 +356,7 @@ class _SignupBodyState extends State<_SignupBody> {
               padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
             ),
-            onPressed: vm.goToStep2,
+            onPressed: vm.prevStep,
             child: Text('Back', style: AppFonts.body(size: 14.5, weight: FontWeight.w600, color: AppColors.ink)),
           ),
           const SizedBox(width: 10),
@@ -423,56 +372,10 @@ class _SignupBodyState extends State<_SignupBody> {
     return '$n';
   }
 
-  Widget _label(String text) => Text(text, style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink));
-
-  Widget _textField(TextEditingController ctrl, String hint) {
-    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
-    return Padding(
-      padding: const EdgeInsets.only(top: 7),
-      child: TextField(
-        controller: ctrl,
-        style: AppFonts.body(size: 14.5, color: AppColors.ink),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: AppFonts.body(size: 14, color: AppColors.ink3),
-          filled: true,
-          fillColor: AppColors.card,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          border: border,
-          enabledBorder: border,
-          focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.accent)),
-        ),
-      ),
-    );
-  }
-
-  Widget _tile({required VoidCallback onTap, required bool on, required IconData icon, required String label}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(13),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: on ? AppColors.accentSoft : AppColors.card,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: on ? AppColors.accent : AppColors.line),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(color: on ? Colors.white : AppColors.paper2, borderRadius: BorderRadius.circular(9)),
-              alignment: Alignment.center,
-              child: Icon(icon, size: 16, color: AppColors.accent),
-            ),
-            const SizedBox(width: 9),
-            Expanded(child: Text(label, style: AppFonts.body(size: 12, weight: FontWeight.w600, color: AppColors.ink))),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _label(String text, {bool mandatory = false}) => Text(
+        mandatory ? '$text *' : text,
+        style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink),
+      );
 
   Widget _chip(String label, bool on, VoidCallback onTap) {
     return InkWell(

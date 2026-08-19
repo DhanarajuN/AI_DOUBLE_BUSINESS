@@ -26,9 +26,9 @@ class ApiClient {
 
   String? get accessToken => _accessToken;
 
-  Future<dynamic> get(String path, {Map<String, String>? query}) {
-    return _request(
-        'GET', path, () => _client.get(_uri(path, query), headers: _headers()));
+  Future<dynamic> get(String path, {Map<String, String>? query, Map<String, String>? headerOverrides}) {
+    return _request('GET', path,
+        () => _client.get(_uri(path, query), headers: _headers(headerOverrides)));
   }
 
   Future<dynamic> post(String path,
@@ -74,12 +74,13 @@ class ApiClient {
 
   String? _encode(Object? body) => body == null ? null : jsonEncode(body);
 
-  Map<String, String> _headers() => {
+  Map<String, String> _headers([Map<String, String>? overrides]) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         if (tenant != null) 'X-Tenant': tenant!,
         if (_accessToken != null && _accessToken!.isNotEmpty)
           'Authorization': 'Bearer $_accessToken',
+        if (overrides != null) ...overrides,
       };
 
   dynamic _decode(http.Response response) {

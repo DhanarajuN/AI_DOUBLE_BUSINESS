@@ -29,6 +29,9 @@ class ServerUrls {
   static String jobTypeInstances(String typeName) =>
       '/api/v1/job-types/name/$typeName/instances';
 
+  static String jobTypeCreateInstance(String typeName) =>
+      '/api/v1/job-types/create/instance/$typeName';
+
   static const String jobInstances = '/api/v1/job-instances';
 
   static const String s3ObjectDownload = '/api/v1/s3-objects/download';
