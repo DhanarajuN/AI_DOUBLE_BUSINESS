@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../viewmodels/knowledge_view_model.dart';
 import '../widgets/business_icons.dart';
+import 'dashboard_view.dart' show stripHtml;
 
 class KnowledgeView extends StatelessWidget {
   const KnowledgeView({super.key});
@@ -425,7 +426,8 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
   Widget _categoryCard(BuildContext context, Map<String, dynamic> item) {
     final data = _itemData(item);
     final title = _firstNonEmptyField(data, widget.titleKeys) ?? 'Untitled';
-    final subtitle = _firstNonEmptyField(data, widget.subtitleKeys);
+    final rawSubtitle = _firstNonEmptyField(data, widget.subtitleKeys);
+    final subtitle = rawSubtitle == null ? null : stripHtml(rawSubtitle);
     final price = _firstNonEmptyField(data, widget.priceKeys);
 
     return InkWell(
@@ -515,7 +517,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                 else
                   ...fields.map((e) => _isPhoneKey(e.key)
                       ? _phoneDetailRow(ctx, _humanizeKey(e.key), e.value.toString())
-                      : _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
+                      : _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
                 const SizedBox(height: 4),
                 SizedBox(
                   width: double.infinity,

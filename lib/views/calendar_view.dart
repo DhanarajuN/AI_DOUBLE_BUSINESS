@@ -1,14 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/booking.dart';
 import '../repositories/workspace_repository.dart';
+import '../services/api_client.dart';
+import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/calendar_view_model.dart';
-import 'dashboard_view.dart' show fmtN, initialsOf, statusColor;
+import 'dashboard_view.dart'
+    show fmtN, initialsOf, orderData, orderStatusOf, orderStatusColor, firstNonEmpty, parseDate, showBookingDetail;
 
 const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const _mons = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const _dows = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+DateTime? _bookingDateTime(Map<String, dynamic> booking) {
+  final data = orderData(booking);
+  final raw = firstNonEmpty(data, const [
+    'Booking Date',
+    'Appointment Date',
+    'Scheduled Date',
+    'Booking Time',
+    'Appointment Time',
+    'Date',
+    'Time',
+  ]);
+  if (raw != null) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed != null) return parsed;
+  }
+  return parseDate(booking['createdAt']);
+}
 
 class CalendarView extends StatelessWidget {
   const CalendarView({super.key});
@@ -16,7 +36,8 @@ class CalendarView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) => CalendarViewModel(ctx.read<WorkspaceRepository>()),
+      create: (ctx) => CalendarViewModel(
+          ctx.read<WorkspaceRepository>(), ctx.read<SessionStorage>(), ctx.read<ApiClient>()),
       child: const _CalendarBody(),
     );
   }
@@ -25,10 +46,12 @@ class CalendarView extends StatelessWidget {
 class _CalendarBody extends StatelessWidget {
   const _CalendarBody();
 
-  Map<DateTime, List<Booking>> _bookingsByDay(List<Booking> bookings) {
-    final map = <DateTime, List<Booking>>{};
+  Map<DateTime, List<Map<String, dynamic>>> _bookingsByDay(List<Map<String, dynamic>> bookings) {
+    final map = <DateTime, List<Map<String, dynamic>>>{};
     for (final b in bookings) {
-      final key = DateTime(b.time.year, b.time.month, b.time.day);
+      final dt = _bookingDateTime(b);
+      if (dt == null) continue;
+      final key = DateTime(dt.year, dt.month, dt.day);
       (map[key] ??= []).add(b);
     }
     return map;
@@ -49,11 +72,15 @@ class _CalendarBody extends StatelessWidget {
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final prevMonthDays = DateTime(month.year, month.month, 0).day;
 
-    final monthBookings = vm.bookings.where((b) => b.time.year == month.year && b.time.month == month.month).toList();
-    final bookedDays = monthBookings.map((b) => b.time.day).toSet();
+    final monthBookings = vm.bookings.where((b) {
+      final dt = _bookingDateTime(b);
+      return dt != null && dt.year == month.year && dt.month == month.month;
+    }).toList();
+    final bookedDays = monthBookings.map((b) => _bookingDateTime(b)!.day).toSet();
     final byDayCount = <int, int>{};
     for (final b in monthBookings) {
-      byDayCount[b.time.day] = (byDayCount[b.time.day] ?? 0) + 1;
+      final d = _bookingDateTime(b)!.day;
+      byDayCount[d] = (byDayCount[d] ?? 0) + 1;
     }
     int? busiestDay;
     byDayCount.forEach((d, c) {
@@ -161,7 +188,7 @@ class _CalendarBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            _detail(vm, map, today),
+            _detail(context, vm, map, today),
           ],
         ),
       ),
@@ -271,7 +298,7 @@ class _CalendarBody extends StatelessWidget {
     );
   }
 
-  Widget _detail(CalendarViewModel vm, Map<DateTime, List<Booking>> map, DateTime today) {
+  Widget _detail(BuildContext context, CalendarViewModel vm, Map<DateTime, List<Map<String, dynamic>>> map, DateTime today) {
     if (vm.selected == null) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -284,7 +311,8 @@ class _CalendarBody extends StatelessWidget {
       );
     }
     final sel = vm.selected!;
-    final bks = (map[sel] ?? const <Booking>[]).toList()..sort((a, b) => a.time.compareTo(b.time));
+    final bks = (map[sel] ?? const <Map<String, dynamic>>[]).toList()
+      ..sort((a, b) => (_bookingDateTime(a) ?? sel).compareTo(_bookingDateTime(b) ?? sel));
     final isPast = sel.isBefore(today);
     const dowFull = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -309,20 +337,6 @@ class _CalendarBody extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!isPast)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: AppColors.paper2,
-                    side: BorderSide(color: AppColors.line2),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                  ),
-                  onPressed: () async {
-                    await vm.addBookingOn(sel);
-                  },
-                  icon: Icon(Icons.auto_awesome_outlined, size: 14, color: AppColors.ink),
-                  label: Text('Add', style: AppFonts.body(size: 11.5, weight: FontWeight.w600, color: AppColors.ink)),
-                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -336,39 +350,50 @@ class _CalendarBody extends StatelessWidget {
               ),
             )
           else
-            ...bks.map((b) => Padding(
+            ...bks.map((b) {
+              final data = orderData(b);
+              final name = firstNonEmpty(data, const ['Customer Name', 'Name', 'Full Name']) ?? 'Customer';
+              final service = firstNonEmpty(data, const ['Service Name', 'Service', 'Item Name', 'Item']) ?? '';
+              final status = orderStatusOf(b);
+              final dt = _bookingDateTime(b);
+              return InkWell(
+                onTap: () => showBookingDetail(context, b),
+                child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 7),
                   child: Row(
                     children: [
                       SizedBox(
                         width: 58,
-                        child: Text(_timeOf(b.time), style: AppFonts.mono(size: 11, color: AppColors.ink2)),
+                        child: Text(dt != null ? _timeOf(dt) : '—', style: AppFonts.mono(size: 11, color: AppColors.ink2)),
                       ),
                       Container(
                         width: 30,
                         height: 30,
                         decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
                         alignment: Alignment.center,
-                        child: Text(initialsOf(b.customerName), style: AppFonts.body(size: 10.5, weight: FontWeight.w700, color: AppColors.accent)),
+                        child: Text(initialsOf(name), style: AppFonts.body(size: 10.5, weight: FontWeight.w700, color: AppColors.accent)),
                       ),
                       const SizedBox(width: 9),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(b.customerName, style: AppFonts.body(size: 13, weight: FontWeight.w600, color: AppColors.ink)),
-                            Text(b.service, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                            Text(name, style: AppFonts.body(size: 13, weight: FontWeight.w600, color: AppColors.ink)),
+                            if (service.isNotEmpty) Text(service, style: AppFonts.body(size: 11, color: AppColors.ink3)),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(color: statusColor(b.status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-                        child: Text(bookingStatusLabel(b.status), style: AppFonts.mono(size: 9.5, color: statusColor(b.status))),
-                      ),
+                      if (status != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(color: orderStatusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
+                          child: Text(status, style: AppFonts.mono(size: 9.5, color: orderStatusColor(status))),
+                        ),
                     ],
                   ),
-                )),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -386,7 +411,7 @@ class _CalendarBody extends StatelessWidget {
 class _Cell {
   final DateTime date;
   final bool other;
-  final List<Booking> bookings;
+  final List<Map<String, dynamic>> bookings;
   final bool isToday;
   final bool isPast;
   const _Cell({required this.date, required this.other, required this.bookings, required this.isToday, required this.isPast});

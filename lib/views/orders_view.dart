@@ -179,7 +179,7 @@ class _OrdersBodyState extends State<_OrdersBody> {
 
     final statusTally = <String, int>{};
     for (final o in periodOrders) {
-      final status = orderStatusOf(orderData(o)) ?? 'Unknown';
+      final status = orderStatusOf(o) ?? 'Unknown';
       statusTally[status] = (statusTally[status] ?? 0) + 1;
     }
 
@@ -368,7 +368,7 @@ class _OrdersBodyState extends State<_OrdersBody> {
   Widget _orderCard(Map<String, dynamic> order) {
     final data = orderData(order);
     final title = orderTitle(order, data);
-    final status = orderStatusOf(data);
+    final status = orderStatusOf(order);
     final created = order['createdAt'] is String ? DateTime.tryParse(order['createdAt'] as String) : null;
     final color = orderStatusColor(status);
 

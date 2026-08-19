@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/booking.dart';
-import '../models/channel.dart';
 import '../models/plan.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
@@ -48,19 +46,6 @@ String initialsOf(String name) {
   return (a + b).toUpperCase();
 }
 
-Color statusColor(BookingStatus s) {
-  switch (s) {
-    case BookingStatus.confirmed:
-      return AppColors.accent;
-    case BookingStatus.completed:
-      return AppColors.ok;
-    case BookingStatus.pending:
-      return AppColors.amber;
-    case BookingStatus.noshow:
-      return AppColors.ink3;
-  }
-}
-
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
 
@@ -86,29 +71,34 @@ class _DashboardBody extends StatelessWidget {
     final hour = DateTime.now().hour;
     final greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     final data = vm.businessData;
-    final heroName = _firstNonEmpty(data, const ['Business Name', 'businessName', 'Company Name', 'Name']) ?? '';
-    final heroOwner = _firstNonEmpty(data, const ['Owner Name', 'ownerName', 'Contact Name', 'Full Name']) ??
-        [_firstNonEmpty(data, const ['First Name']), _firstNonEmpty(data, const ['Last Name'])]
+    final heroName = firstNonEmpty(data, const ['Business Name', 'businessName', 'Company Name', 'Name']) ?? '';
+    final heroOwner = firstNonEmpty(data, const ['Owner Name', 'ownerName', 'Contact Name', 'Full Name']) ??
+        [firstNonEmpty(data, const ['First Name']), firstNonEmpty(data, const ['Last Name'])]
             .whereType<String>()
             .join(' ');
-    final heroCategory = _firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
-    final heroHours = _firstNonEmpty(data, const ['Availabilty Times', 'Availability Times'])?.split('(').first.trim();
+    final heroCategory = firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
+    final heroHours = firstNonEmpty(data, const ['Availabilty Times', 'Availability Times'])?.split('(').first.trim();
     final plan = planById(biz.planId);
     final c = kCurrencies[vm.currency]!;
     final bks = vm.bookings;
     final totalTok = vm.usageIn + vm.usageOut;
     final monthTok = vm.usageDaily.fold<int>(0, (a, b) => a + b);
     final now = DateTime.now();
-    final bksMonth = bks.where((b) => b.time.year == now.year && b.time.month == now.month).length;
-    final upcoming = bks.where((b) => b.status == BookingStatus.confirmed || b.status == BookingStatus.pending).length;
-    final completed = bks.where((b) => b.status == BookingStatus.completed).length;
+    final bksWeek = bks.where((b) {
+      final created = parseDate(b['createdAt']);
+      return created != null && now.difference(created).inDays < 7;
+    }).length;
+    final bksMonth = bks.where((b) {
+      final created = parseDate(b['createdAt']);
+      return created != null && created.year == now.year && created.month == now.month;
+    }).length;
     final orders = vm.orders;
     final ordersWeek = orders.where((o) {
-      final created = _parseDate(o['createdAt']);
+      final created = parseDate(o['createdAt']);
       return created != null && now.difference(created).inDays < 7;
     }).length;
     final ordersMonth = orders.where((o) {
-      final created = _parseDate(o['createdAt']);
+      final created = parseDate(o['createdAt']);
       return created != null && created.year == now.year && created.month == now.month;
     }).length;
 
@@ -131,16 +121,16 @@ class _DashboardBody extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        _stat(fmtN(bks.length), 'total'),
+                        _stat(fmtN(bksWeek), 'this week'),
                         _stat(fmtN(bksMonth), 'this month'),
-                        _stat(fmtN(upcoming), 'upcoming'),
-                        _stat(fmtN(completed), 'completed'),
                       ],
                     ),
                     const SizedBox(height: 10),
                     if (bks.isEmpty)
                       _empty('No bookings yet.')
                     else
-                      ...bks.take(5).map((b) => _bookingRow(context, b)),
+                      ...bks.take(5).map((b) => bookingRow(context, b)),
                   ],
                 ),
               ),
@@ -435,125 +425,6 @@ class _DashboardBody extends StatelessWidget {
         ),
       );
 
-  Widget _bookingRow(BuildContext context, Booking b) => InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => _showBookingDetail(context, b),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-                alignment: Alignment.center,
-                child: Text(initialsOf(b.customerName), style: AppFonts.body(size: 11.5, weight: FontWeight.w700, color: AppColors.accent)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(b.customerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                    Text('${b.service} · ${channelById(b.channelId).name}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(color: statusColor(b.status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-                    child: Text(bookingStatusLabel(b.status), style: AppFonts.mono(size: 9.5, color: statusColor(b.status))),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(timeAgo(b.time), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
-                ],
-              ),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
-            ],
-          ),
-        ),
-      );
-
-  void _showBookingDetail(BuildContext context, Booking b) {
-    final ch = channelById(b.channelId);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 18),
-                    decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-                      alignment: Alignment.center,
-                      child: Text(initialsOf(b.customerName), style: AppFonts.body(size: 14, weight: FontWeight.w700, color: AppColors.accent)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(b.customerName, style: AppFonts.display(size: 17)),
-                          const SizedBox(height: 2),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: statusColor(b.status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-                            child: Text(bookingStatusLabel(b.status), style: AppFonts.mono(size: 10, color: statusColor(b.status))),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _detailRow(Icons.design_services_outlined, 'Service', b.service),
-                _detailRow(businessIcon(ch.iconKey), 'Channel', ch.name),
-                _detailRow(Icons.event_outlined, 'Date & time', fmtDateTime(b.time)),
-                _detailRow(Icons.tag, 'Booking ID', b.id),
-                const SizedBox(height: 4),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.line2),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-                    ),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _empty(String text) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Text(text, textAlign: TextAlign.center, style: AppFonts.body(size: 12.5, color: AppColors.ink3)),
@@ -626,7 +497,7 @@ Widget _detailRow(IconData icon, String label, String value) => Padding(
       ),
     );
 
-String? _firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
+String? firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
   if (data == null) return null;
   for (final key in keys) {
     final value = data[key];
@@ -639,7 +510,7 @@ Map<String, dynamic> orderData(Map<String, dynamic> order) =>
     order['data'] is Map ? Map<String, dynamic>.from(order['data'] as Map) : <String, dynamic>{};
 
 String orderTitle(Map<String, dynamic> order, Map<String, dynamic> data) =>
-    _firstNonEmpty(data, const ['Customer Name', 'Name', 'Title', 'Product Name', 'Product', 'Item', 'Order Name']) ??
+    firstNonEmpty(data, const ['Customer Name', 'Name', 'Title', 'Product Name', 'Product', 'Item', 'Order Name']) ??
     'Order ${_shortId(order)}';
 
 String _shortId(Map<String, dynamic> order, {bool full = false}) {
@@ -649,7 +520,22 @@ String _shortId(Map<String, dynamic> order, {bool full = false}) {
   return id.substring(id.length - 8);
 }
 
-DateTime? _parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
+DateTime? parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
+
+String stripHtml(String input) {
+  if (!input.contains('<')) return input;
+  return input
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]*>'), '')
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'")
+      .trim();
+}
 
 const kOrderLifecycle = ['Placed', 'Accepted', 'In Transit', 'Delivered'];
 
@@ -660,7 +546,13 @@ int _lifecycleIndexOf(String? status) {
   return kOrderLifecycle.indexWhere((s) => s.toLowerCase() == status.toLowerCase());
 }
 
-String? orderStatusOf(Map<String, dynamic> data) {
+String? orderStatusOf(Map<String, dynamic> order) {
+  final jobLevelStatus = order['Current_Job_Status'];
+  if (jobLevelStatus is String && jobLevelStatus.trim().isNotEmpty) {
+    return jobLevelStatus.trim();
+  }
+
+  final data = orderData(order);
   for (final entry in data.entries) {
     if (entry.key.toLowerCase() == 'status' &&
         entry.value is String &&
@@ -793,8 +685,9 @@ String _humanizeKey(String key) {
 Widget orderRow(BuildContext context, Map<String, dynamic> order) {
   final data = orderData(order);
   final title = orderTitle(order, data);
-  final subtitle = _firstNonEmpty(data, const ['Item', 'Product', 'Product Name', 'Service', 'Status']) ?? 'Tap for details';
-  final created = _parseDate(order['createdAt']);
+  final rawSubtitle = firstNonEmpty(data, const ['Item Name', 'Item', 'Product Name', 'Product', 'Service', 'Status']);
+  final subtitle = rawSubtitle == null ? 'Tap for details' : stripHtml(rawSubtitle);
+  final created = parseDate(order['createdAt']);
   return InkWell(
     borderRadius: BorderRadius.circular(10),
     onTap: () => showOrderDetail(context, order),
@@ -833,7 +726,7 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
 void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
   final vm = context.read<DashboardViewModel>();
   final title = orderTitle(order, orderData(order));
-  final created = _parseDate(order['createdAt']);
+  final created = parseDate(order['createdAt']);
 
   showModalBottomSheet(
     context: context,
@@ -843,7 +736,7 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setSheetState) {
         final data = orderData(order);
-        final status = orderStatusOf(data);
+        final status = orderStatusOf(order);
         final fields = data.entries
             .where((e) => e.key.toLowerCase() != 'status')
             .where((e) => e.value is String || e.value is num || e.value is bool)
@@ -890,7 +783,7 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
                   if (fields.isEmpty)
                     _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
                   else
-                    ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), e.value.toString())),
+                    ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
                   _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
                   const SizedBox(height: 4),
                   SizedBox(
@@ -911,6 +804,151 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
           ),
         );
       },
+    ),
+  );
+}
+
+Widget bookingRow(BuildContext context, Map<String, dynamic> booking) {
+  final data = orderData(booking);
+  final title = firstNonEmpty(data, const ['Customer Name', 'Name', 'Full Name']) ?? 'Booking ${_shortId(booking)}';
+  final rawSubtitle = firstNonEmpty(data, const ['Service Name', 'Service', 'Item Name', 'Item']);
+  final subtitle = rawSubtitle == null ? 'Tap for details' : stripHtml(rawSubtitle);
+  final created = parseDate(booking['createdAt']);
+  final status = orderStatusOf(booking);
+  final color = orderStatusColor(status);
+  return InkWell(
+    borderRadius: BorderRadius.circular(10),
+    onTap: () => showBookingDetail(context, booking),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Text(initialsOf(title), style: AppFonts.body(size: 11.5, weight: FontWeight.w700, color: AppColors.accent)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (status != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
+                  child: Text(status, style: AppFonts.mono(size: 9.5, color: color)),
+                ),
+              if (created != null) ...[
+                const SizedBox(height: 3),
+                Text(timeAgo(created), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
+              ],
+            ],
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
+        ],
+      ),
+    ),
+  );
+}
+
+void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
+  final data = orderData(booking);
+  final title = firstNonEmpty(data, const ['Customer Name', 'Name', 'Full Name']) ?? 'Booking ${_shortId(booking)}';
+  final created = parseDate(booking['createdAt']);
+  final status = orderStatusOf(booking);
+  final fields = data.entries
+      .where((e) => e.key.toLowerCase() != 'status')
+      .where((e) => e.value is String || e.value is num || e.value is bool)
+      .where((e) => e.value.toString().trim().isNotEmpty)
+      .take(8)
+      .toList();
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.card,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 18),
+                  decoration: BoxDecoration(color: AppColors.line2, borderRadius: BorderRadius.circular(100)),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: Text(initialsOf(title), style: AppFonts.body(size: 14, weight: FontWeight.w700, color: AppColors.accent)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: AppFonts.display(size: 17)),
+                        if (status != null) ...[
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: orderStatusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
+                            child: Text(status, style: AppFonts.mono(size: 10, color: orderStatusColor(status))),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (created != null) _detailRow(Icons.event_outlined, 'Created', fmtDateTime(created)),
+              if (fields.isEmpty)
+                _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
+              else
+                ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
+              _detailRow(Icons.tag, 'Booking ID', _shortId(booking, full: true)),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.line2),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }

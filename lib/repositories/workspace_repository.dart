@@ -2,22 +2,17 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/booking.dart';
 import '../models/business_profile.dart';
 import '../models/channel.dart';
 import '../models/doc_source.dart';
 import '../models/industry.dart';
 import '../theme/app_theme.dart';
 
-const _kFirsts = ['Aarav', 'Priya', 'Rohan', 'Anjali', 'Vikram', 'Sneha', 'Karthik', 'Neha', 'Arjun', 'Divya', 'Rahul', 'Meera', 'Aditya', 'Pooja', 'Siddharth', 'Kavya', 'Ishaan', 'Riya', 'Aman', 'Tara'];
-const _kLasts = ['Sharma', 'Iyer', 'Nair', 'Reddy', 'Patel', 'Gupta', 'Menon', 'Rao', 'Khan', 'Desai', 'Kapoor', 'Mehta', 'Bose', 'Pillai', 'Singh'];
-
 class WorkspaceRepository extends ChangeNotifier {
   final _rand = Random();
   SharedPreferences? _prefs;
 
   BusinessProfile? business;
-  List<Booking> bookings = [];
   List<DocSource> docs = [];
   List<Map<String, String>> chatMessages = [];
   int usageIn = 0;
@@ -40,9 +35,6 @@ class WorkspaceRepository extends ChangeNotifier {
     final p = _prefs!;
     final bizJson = p.getString('biz');
     if (bizJson != null) business = BusinessProfile.fromJson(jsonDecode(bizJson) as Map<String, dynamic>);
-    bookings = (p.getStringList('bookings') ?? [])
-        .map((s) => Booking.fromJson(jsonDecode(s) as Map<String, dynamic>))
-        .toList();
     docs = (p.getStringList('docs') ?? []).map((s) => DocSource.fromJson(jsonDecode(s) as Map<String, dynamic>)).toList();
     chatMessages = (p.getStringList('chatMessages') ?? [])
         .map((s) => Map<String, String>.from(jsonDecode(s) as Map))
@@ -67,10 +59,6 @@ class WorkspaceRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _saveBookings() async {
-    await _prefs?.setStringList('bookings', bookings.map((b) => jsonEncode(b.toJson())).toList());
-  }
-
   Future<void> _saveDocs() async {
     await _prefs?.setStringList('docs', docs.map((d) => jsonEncode(d.toJson())).toList());
   }
@@ -82,21 +70,6 @@ class WorkspaceRepository extends ChangeNotifier {
     await p.setInt('usageOut', usageOut);
     await p.setInt('usageCalls', usageCalls);
     await p.setStringList('usageDaily', usageDaily.map((e) => e.toString()).toList());
-  }
-
-  T _pick<T>(List<T> list) => list[_rand.nextInt(list.length)];
-  String _randName() => '${_pick(_kFirsts)} ${_pick(_kLasts)}';
-
-  BookingStatus _weightedStatus(int daysAgo) {
-    final r = _rand.nextDouble();
-    if (daysAgo <= 1) {
-      if (r < 0.6) return BookingStatus.confirmed;
-      if (r < 0.85) return BookingStatus.pending;
-      return BookingStatus.completed;
-    }
-    if (r < 0.72) return BookingStatus.completed;
-    if (r < 0.9) return BookingStatus.confirmed;
-    return BookingStatus.noshow;
   }
 
   Future<void> ensureBusinessBelongsTo(String identity) async {
@@ -167,38 +140,15 @@ class WorkspaceRepository extends ChangeNotifier {
   }
 
   Future<void> _seedBusinessData() async {
-    final ind = industryById(business?.industryId);
-    final n = 9 + _rand.nextInt(8);
-    final now = DateTime.now();
-    final generated = <Booking>[];
-    for (var i = 0; i < n; i++) {
-      final daysAgo = _rand.nextInt(14);
-      final time = now.subtract(Duration(days: daysAgo, minutes: _rand.nextInt(1440)));
-      generated.add(Booking(
-        id: 'bk${time.millisecondsSinceEpoch}_$i',
-        customerName: _randName(),
-        service: _pick(ind.services),
-        channelId: _pick(kChannels).id,
-        time: time,
-        status: _weightedStatus(daysAgo),
-      ));
-    }
-    generated.sort((a, b) => b.time.compareTo(a.time));
-    bookings = generated;
-    await _saveBookings();
-
     final daily = List<int>.filled(14, 0);
-    for (final b in bookings) {
-      final diffDays = now.difference(b.time).inDays;
-      final d = 13 - (diffDays > 13 ? 13 : diffDays);
-      final t = 900 + _rand.nextInt(2400);
-      if (d >= 0 && d < 14) daily[d] += t;
+    for (var d = 0; d < 14; d++) {
+      if (_rand.nextDouble() < 0.75) daily[d] = 900 + _rand.nextInt(2400);
     }
     usageDaily = daily;
     final total = daily.fold<int>(0, (a, b) => a + b);
     usageIn = (total * 0.58).round();
     usageOut = (total * 0.42).round();
-    usageCalls = bookings.length;
+    usageCalls = daily.where((t) => t > 0).length;
     await _saveUsage();
   }
 
@@ -210,28 +160,6 @@ class WorkspaceRepository extends ChangeNotifier {
     usageDaily[13] += inTok + outTok;
     await _saveUsage();
     notifyListeners();
-  }
-
-  Future<Booking> addBookingOn(DateTime day) async {
-    final ind = industryById(business?.industryId);
-    final hour = 9 + _rand.nextInt(9);
-    final minute = [0, 15, 30, 45][_rand.nextInt(4)];
-    final time = DateTime(day.year, day.month, day.day, hour, minute);
-    final bk = Booking(
-      id: 'bk${DateTime.now().millisecondsSinceEpoch}',
-      customerName: _randName(),
-      service: _pick(ind.services),
-      channelId: _pick(kChannels).id,
-      time: time,
-      status: time.isAfter(DateTime.now()) ? BookingStatus.confirmed : BookingStatus.completed,
-    );
-    bookings.add(bk);
-    bookings.sort((a, b) => b.time.compareTo(a.time));
-    await _saveBookings();
-    final t = 900 + _rand.nextInt(1600);
-    await recordUsage((t * 0.58).round(), (t * 0.42).round());
-    notifyListeners();
-    return bk;
   }
 
   Future<void> _saveChat() async {
@@ -350,7 +278,6 @@ class WorkspaceRepository extends ChangeNotifier {
       }
     }
     business = null;
-    bookings = [];
     docs = [];
     chatMessages = [];
     usageIn = 0;

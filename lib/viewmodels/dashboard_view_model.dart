@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../constants/server_urls.dart';
-import '../models/booking.dart';
 import '../models/business_profile.dart';
 import '../models/doc_source.dart';
 import '../repositories/workspace_repository.dart';
@@ -34,7 +33,8 @@ class DashboardViewModel extends ChangeNotifier {
       .map((j) => Map<String, dynamic>.from(j))
       .toList();
 
-  int get bookingsCount => _subJobsOfType('Bookings').length;
+  List<Map<String, dynamic>> get bookings => _subJobsOfType('Bookings');
+  int get bookingsCount => bookings.length;
 
   static final List<Map<String, dynamic>> _dummyOrders = [
     {
@@ -83,6 +83,8 @@ class DashboardViewModel extends ChangeNotifier {
   int get ordersCount => orders.length;
 
   void updateOrderStatus(Map<String, dynamic> order, String status) {
+    order['Current_Job_Status'] = status;
+
     var data = order['data'];
     if (data is! Map) {
       data = <String, dynamic>{};
@@ -236,7 +238,6 @@ class DashboardViewModel extends ChangeNotifier {
   }
 
   BusinessProfile? get business => _workspace.business;
-  List<Booking> get bookings => _workspace.bookings;
   List<DocSource> get docs => _workspace.docs;
   int get usageIn => _workspace.usageIn;
   int get usageOut => _workspace.usageOut;

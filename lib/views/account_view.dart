@@ -4,6 +4,7 @@ import '../models/plan.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
+import '../services/api_client.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/account_view_model.dart';
@@ -18,8 +19,8 @@ class AccountView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) => AccountViewModel(
-          ctx.read<AuthRepository>(), ctx.read<WorkspaceRepository>(), ctx.read<SessionStorage>()),
+      create: (ctx) => AccountViewModel(ctx.read<AuthRepository>(), ctx.read<WorkspaceRepository>(),
+          ctx.read<SessionStorage>(), ctx.read<ApiClient>()),
       child: const _AccountBody(),
     );
   }
@@ -50,26 +51,6 @@ class _AccountBodyState extends State<_AccountBody> {
     if (confirmed == true && context.mounted) {
       await vm.logout();
       if (context.mounted) Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-    }
-  }
-
-  Future<void> _resetAll(BuildContext context, AccountViewModel vm) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Reset everything?', style: AppFonts.display(size: 17)),
-        content: Text("This clears your chat, documents, bookings and settings on this device. It can't be undone.", style: AppFonts.body(size: 13.5, color: AppColors.ink2)),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('Cancel', style: AppFonts.body(size: 14, color: AppColors.ink2))),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text('Reset', style: AppFonts.body(size: 14, weight: FontWeight.w600, color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      await vm.resetAll();
-      if (context.mounted) Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.signup, (route) => false);
     }
   }
 
@@ -211,20 +192,6 @@ class _AccountBodyState extends State<_AccountBody> {
                       }).toList(),
                     ),
                   ),
-                ],
-              ),
-            ),
-            _sectionTitle('Data'),
-            _card(
-              child: Column(
-                children: [
-                  _row(Icons.description_outlined, '${vm.docCount} document${vm.docCount == 1 ? '' : 's'}', 'Stored on this device'),
-                  Divider(height: 20, color: AppColors.line),
-                  _row(Icons.delete_outline, 'Reset everything', 'Clears chat, docs and settings',
-                      trailing: TextButton(
-                        onPressed: () => _resetAll(context, vm),
-                        child: Text('Reset', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.danger)),
-                      )),
                 ],
               ),
             ),

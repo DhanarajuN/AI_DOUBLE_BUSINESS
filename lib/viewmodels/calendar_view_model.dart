@@ -1,13 +1,19 @@
 import 'package:flutter/foundation.dart';
-import '../models/booking.dart';
+import '../constants/server_urls.dart';
 import '../models/business_profile.dart';
 import '../repositories/workspace_repository.dart';
+import '../services/api_client.dart';
+import '../services/app_logger.dart';
+import '../services/session_storage.dart';
 
 class CalendarViewModel extends ChangeNotifier {
   final WorkspaceRepository _workspace;
+  final SessionStorage _sessionStorage;
+  final ApiClient _apiClient;
 
-  CalendarViewModel(this._workspace) {
+  CalendarViewModel(this._workspace, this._sessionStorage, this._apiClient) {
     _workspace.addListener(notifyListeners);
+    _loadSubJobs();
   }
 
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -17,7 +23,37 @@ class CalendarViewModel extends ChangeNotifier {
   DateTime? get selected => _selected;
 
   BusinessProfile? get business => _workspace.business;
-  List<Booking> get bookings => _workspace.bookings;
+
+  List<dynamic> _subJobs = [];
+
+  List<Map<String, dynamic>> get bookings => _subJobs
+      .whereType<Map>()
+      .where((j) {
+        final type = j['jobTypeName'];
+        return type is String && type.toLowerCase() == 'bookings';
+      })
+      .map((j) => Map<String, dynamic>.from(j))
+      .toList();
+
+  Future<void> _loadSubJobs() async {
+    final businessId = await _sessionStorage.readBusinessId();
+    if (businessId == null || businessId.isEmpty) return;
+    try {
+      final result = await _apiClient.get('${ServerUrls.jobInstances}/$businessId');
+      if (result is! Map<String, dynamic>) return;
+      final jobs = result['jobs'] as List?;
+      if (jobs == null || jobs.isEmpty) return;
+      final job = jobs.first;
+      if (job is! Map<String, dynamic>) return;
+      final subJobs = job['CreatedSubJobs'];
+      if (subJobs is List) {
+        _subJobs = subJobs;
+        notifyListeners();
+      }
+    } catch (e) {
+      AppLogger.w('CalendarVM', 'Could not load sub jobs: $e');
+    }
+  }
 
   void shift(int n) {
     _month = DateTime(_month.year, _month.month + n, 1);
@@ -35,8 +71,6 @@ class CalendarViewModel extends ChangeNotifier {
     _selected = day;
     notifyListeners();
   }
-
-  Future<Booking> addBookingOn(DateTime day) => _workspace.addBookingOn(day);
 
   @override
   void dispose() {
