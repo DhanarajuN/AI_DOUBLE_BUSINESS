@@ -12,19 +12,23 @@ import '../widgets/app_logo.dart';
 import '../widgets/google_logo.dart';
 
 class LoginFormView extends StatelessWidget {
-  const LoginFormView({super.key});
+  final bool showDefaultPasswordNotice;
+
+  const LoginFormView({super.key, this.showDefaultPasswordNotice = false});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (ctx) => LoginViewModel(ctx.read<AuthRepository>()),
-      child: const _LoginFormBody(),
+      child: _LoginFormBody(showDefaultPasswordNotice: showDefaultPasswordNotice),
     );
   }
 }
 
 class _LoginFormBody extends StatefulWidget {
-  const _LoginFormBody();
+  final bool showDefaultPasswordNotice;
+
+  const _LoginFormBody({required this.showDefaultPasswordNotice});
 
   @override
   State<_LoginFormBody> createState() => _LoginFormBodyState();
@@ -40,6 +44,14 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
   void initState() {
     super.initState();
     _loadRememberedCredentials();
+    if (widget.showDefaultPasswordNotice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your default password is Gosure@123'), behavior: SnackBarBehavior.floating),
+        );
+      });
+    }
   }
 
   Future<void> _loadRememberedCredentials() async {

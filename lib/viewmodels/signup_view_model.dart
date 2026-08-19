@@ -3,6 +3,7 @@ import '../models/job_type_schema.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
+import '../services/job_type_instance_service.dart';
 import '../services/job_type_schema_service.dart';
 
 const _kBusinessSchemaTestToken =
@@ -32,15 +33,6 @@ class SignupViewModel extends ChangeNotifier {
   final Map<String, dynamic> _values = {};
   dynamic valueOf(String fieldName) => _values[fieldName];
 
-  final String _size = '';
-  String get size => _size;
-
-  String _region = 'in';
-  String get region => _region;
-
-  String _planId = 'growth';
-  String get planId => _planId;
-
   bool _submitting = false;
   bool get submitting => _submitting;
 
@@ -63,7 +55,7 @@ class SignupViewModel extends ChangeNotifier {
     return s.fieldsInGroup(group).where((f) => !_kSkipTypes.contains(f.type)).toList();
   }
 
-  int get totalSteps => groupNames.length + 1;
+  int get totalSteps => groupNames.length;
 
   String? _parentFieldNameOf(JobTypeField field) {
     final s = _schema;
@@ -74,12 +66,13 @@ class SignupViewModel extends ChangeNotifier {
     return null;
   }
 
-  List<String> optionsForField(JobTypeField field) {
+  List<JobTypeFieldOption> optionsForField(JobTypeField field) {
     final s = _schema;
     if (s == null) return const [];
     final parentName = _parentFieldNameOf(field);
-    final parentValue = parentName == null ? null : _values[parentName] as String?;
-    return s.optionsFor(field, parentSelectionLabel: parentValue);
+    final parentRaw = parentName == null ? null : _values[parentName] as String?;
+    final parentLabel = parentRaw == null ? null : JobTypeFieldOption.labelOf(parentRaw);
+    return s.optionsFor(field, parentSelectionLabel: parentLabel);
   }
 
   void setTextValue(String fieldName, String value) {
@@ -87,15 +80,15 @@ class SignupViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void pickSingleValue(JobTypeField field, String value) {
-    _values[field.name] = value;
+  void pickSingleValue(JobTypeField field, JobTypeFieldOption option) {
+    _values[field.name] = option.submissionValue;
     _clearDependents(field.name);
     notifyListeners();
   }
 
-  void toggleMultiValue(JobTypeField field, String option) {
+  void toggleMultiValue(JobTypeField field, JobTypeFieldOption option) {
     final current = Set<String>.from((_values[field.name] as Set<String>?) ?? const <String>{});
-    if (!current.remove(option)) current.add(option);
+    if (!current.remove(option.submissionValue)) current.add(option.submissionValue);
     _values[field.name] = current;
     notifyListeners();
   }
@@ -124,16 +117,6 @@ class SignupViewModel extends ChangeNotifier {
   }
 
   Future<void> retryLoadSchema() => _loadSchema();
-
-  void pickRegion(String r) {
-    _region = r;
-    notifyListeners();
-  }
-
-  void pickPlan(String id) {
-    _planId = id;
-    notifyListeners();
-  }
 
   String? _mandatoryErrorFor(JobTypeField field) {
     if (!field.mandatory) return null;
@@ -165,7 +148,16 @@ class SignupViewModel extends ChangeNotifier {
     if (_step > 0) goToStep(_step - 1);
   }
 
-  Future<void> complete() async {
+  Map<String, dynamic> _buildSubmissionData() {
+    final data = <String, dynamic>{};
+    for (final entry in _values.entries) {
+      final value = entry.value;
+      data[entry.key] = value is Set<String> ? value.toList() : value;
+    }
+    return data;
+  }
+
+  Future<String?> complete() async {
     _submitting = true;
     notifyListeners();
     final businessName = ((_values['Business Name'] as String?) ?? '').trim();
@@ -173,16 +165,26 @@ class SignupViewModel extends ChangeNotifier {
     final lastName = ((_values['Last Name'] as String?) ?? '').trim();
     final owner = [firstName, lastName].where((s) => s.isNotEmpty).join(' ');
     final category = _values['Business Category'] as String?;
-    await _workspaceRepository.completeSignup(
-      name: businessName,
-      owner: owner.isNotEmpty ? owner : (_authRepository.currentUser?.name ?? ''),
-      email: _authRepository.currentUser?.username ?? '',
-      industryId: category ?? 'other',
-      size: _size,
-      planId: _planId,
-      region: _region,
-    );
+
+    final jobTypeId = _schema?.jobTypeId;
+    final error = (jobTypeId == null || jobTypeId.isEmpty)
+        ? "Couldn't save your workspace. Please try again."
+        : await createJobTypeInstance(_apiClient, jobTypeId: jobTypeId, data: _buildSubmissionData());
+
+    if (error == null) {
+      await _workspaceRepository.completeSignup(
+        name: businessName,
+        owner: owner.isNotEmpty ? owner : (_authRepository.currentUser?.name ?? ''),
+        email: _authRepository.currentUser?.username ?? '',
+        industryId: category ?? 'other',
+        size: '',
+        planId: 'growth',
+        region: 'in',
+      );
+    }
+
     _submitting = false;
     notifyListeners();
+    return error;
   }
 }

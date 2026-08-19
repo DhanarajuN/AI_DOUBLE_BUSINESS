@@ -92,8 +92,24 @@ class ApiClient {
       String? listField(String key) => body is Map && body[key] is List
           ? (body[key] as List).map((e) => e.toString()).join(', ')
           : null;
-      final serverMessage =
-          stringField('msg') ?? stringField('message') ?? listField('messages');
+      String? validationErrorsField() {
+        if (body is! Map || body['validationErrors'] is! List) return null;
+        final parts = <String>[];
+        for (final entry in body['validationErrors'] as List) {
+          if (entry is Map) {
+            for (final field in entry.entries) {
+              parts.add('${field.key}: ${field.value}');
+            }
+          } else if (entry != null) {
+            parts.add(entry.toString());
+          }
+        }
+        return parts.isEmpty ? null : parts.join('; ');
+      }
+      final serverMessage = stringField('msg') ??
+          stringField('message') ??
+          listField('messages') ??
+          validationErrorsField();
       final reason = response.reasonPhrase;
       final message = (serverMessage != null && serverMessage.isNotEmpty)
           ? serverMessage

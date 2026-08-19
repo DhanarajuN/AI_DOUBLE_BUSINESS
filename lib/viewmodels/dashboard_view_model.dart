@@ -37,49 +37,7 @@ class DashboardViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> get bookings => _subJobsOfType(AppConstants.jobTypeBookings);
   int get bookingsCount => bookings.length;
 
-  static final List<Map<String, dynamic>> _dummyOrders = [
-    {
-      'id': 'dummy-order-1',
-      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-      'data': {'Customer Name': 'Aarav Sharma', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Accepted'},
-    },
-    {
-      'id': 'dummy-order-2',
-      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
-      'createdAt': DateTime.now().subtract(const Duration(days: 1, hours: 2)).toIso8601String(),
-      'data': {'Customer Name': 'Priya Nair', 'Product Name': 'Website Chat Widget', 'Amount': '₹1,499', 'Status': 'Delivered'},
-    },
-    {
-      'id': 'dummy-order-3',
-      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
-      'createdAt': DateTime.now().subtract(const Duration(days: 2, hours: 5)).toIso8601String(),
-      'data': {'Customer Name': 'Rohan Gupta', 'Product Name': 'WhatsApp Integration', 'Amount': '₹2,999', 'Status': 'In Transit'},
-    },
-    {
-      'id': 'dummy-order-4',
-      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 20)).toIso8601String(),
-      'data': {'Customer Name': 'Neha Iyer', 'Product Name': 'Calendar Booking Setup', 'Amount': '₹1,999', 'Status': 'Placed'},
-    },
-    {
-      'id': 'dummy-order-5',
-      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
-      'createdAt': DateTime.now().subtract(const Duration(days: 10)).toIso8601String(),
-      'data': {'Customer Name': 'Karthik Rao', 'Product Name': 'Knowledge Base Import', 'Amount': '₹3,499', 'Status': 'Delivered'},
-    },
-    {
-      'id': 'dummy-order-6',
-      AppConstants.fieldJobTypeName: AppConstants.jobTypeOrders,
-      'createdAt': DateTime.now().subtract(const Duration(days: 40)).toIso8601String(),
-      'data': {'Customer Name': 'Divya Menon', 'Product Name': 'Premium Plan Setup', 'Amount': '₹4,999', 'Status': 'Cancelled'},
-    },
-  ];
-
-  List<Map<String, dynamic>> get orders {
-    final real = _subJobsOfType(AppConstants.jobTypeOrders);
-    return real.isNotEmpty ? real : _dummyOrders;
-  }
+  List<Map<String, dynamic>> get orders => _subJobsOfType(AppConstants.jobTypeOrders);
 
   int get ordersCount => orders.length;
 

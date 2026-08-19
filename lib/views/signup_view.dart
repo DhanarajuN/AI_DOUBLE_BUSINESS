@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/job_type_schema.dart';
-import '../models/plan.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
@@ -11,6 +10,7 @@ import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/signup_view_model.dart';
 import '../widgets/app_logo.dart';
+import 'login_form_view.dart';
 
 class SignupView extends StatelessWidget {
   const SignupView({super.key});
@@ -59,15 +59,22 @@ class _SignupBodyState extends State<_SignupBody> {
   }
 
   Future<void> _complete(SignupViewModel vm) async {
-    await vm.complete();
+    final error = await vm.complete();
     if (!mounted) return;
+    if (error != null) {
+      _warn(error);
+      return;
+    }
     await resolveBusinessForEmail(
       context.read<SessionStorage>(),
       context.read<ApiClient>(),
       context.read<AuthRepository>().currentUser?.username,
     );
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginFormView(showDefaultPasswordNotice: true)),
+      (route) => false,
+    );
   }
 
   void _handleBack(SignupViewModel vm) {
@@ -171,11 +178,21 @@ class _SignupBodyState extends State<_SignupBody> {
     if (vm.step < groups.length) {
       return _buildGroupStep(vm, groups[vm.step]);
     }
-    return _buildPlanStep(vm);
+    return const [];
+  }
+
+  void _completeGroup(SignupViewModel vm, String group) {
+    final error = vm.validateGroup(group);
+    if (error != null) {
+      _warn(error);
+      return;
+    }
+    _complete(vm);
   }
 
   List<Widget> _buildGroupStep(SignupViewModel vm, String group) {
     final fields = vm.fieldsForGroup(group);
+    final isLastStep = vm.step == vm.groupNames.length - 1;
     return [
       Text(group, style: AppFonts.display(size: 24)),
       const SizedBox(height: 20),
@@ -195,7 +212,15 @@ class _SignupBodyState extends State<_SignupBody> {
             ),
             const SizedBox(width: 10),
           ],
-          Expanded(child: _primaryButton('Continue', Icons.arrow_forward, () => _nextGroup(vm, group))),
+          Expanded(
+            child: _primaryButton(
+              isLastStep ? (vm.submitting ? 'Creating…' : 'Create workspace') : 'Continue',
+              Icons.arrow_forward,
+              isLastStep
+                  ? (vm.submitting ? null : () => _completeGroup(vm, group))
+                  : () => _nextGroup(vm, group),
+            ),
+          ),
         ],
       ),
     ];
@@ -223,9 +248,9 @@ class _SignupBodyState extends State<_SignupBody> {
               runSpacing: 8,
               children: options.map((o) {
                 final on = field.multiselect
-                    ? ((vm.valueOf(field.name) as Set<String>?)?.contains(o) ?? false)
-                    : vm.valueOf(field.name) == o;
-                return _chip(o, on, () => field.multiselect ? vm.toggleMultiValue(field, o) : vm.pickSingleValue(field, o));
+                    ? ((vm.valueOf(field.name) as Set<String>?)?.contains(o.submissionValue) ?? false)
+                    : vm.valueOf(field.name) == o.submissionValue;
+                return _chip(o.label, on, () => field.multiselect ? vm.toggleMultiValue(field, o) : vm.pickSingleValue(field, o));
               }).toList(),
             ),
         ],
@@ -270,106 +295,6 @@ class _SignupBodyState extends State<_SignupBody> {
         ],
       ),
     );
-  }
-
-  List<Widget> _buildPlanStep(SignupViewModel vm) {
-    final c = kCurrencies[vm.region]!;
-    final plans = kPlans.where((p) => p.id != 'enterprise').toList();
-    return [
-      Text('Team & plan', style: AppFonts.display(size: 24)),
-      const SizedBox(height: 6),
-      Text(
-        'Pick a starting plan — change it any time. Every plan includes a conversation package.',
-        style: AppFonts.body(size: 13.5, color: AppColors.ink2).copyWith(height: 1.5),
-      ),
-      const SizedBox(height: 20),
-      _label('Billing region'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: kCurrencies.entries.map((e) {
-          final on = vm.region == e.key;
-          return _chip(e.value.label, on, () => vm.pickRegion(e.key));
-        }).toList(),
-      ),
-      const SizedBox(height: 18),
-      _label('Plan'),
-      const SizedBox(height: 8),
-      ...plans.map((p) {
-        final on = vm.planId == p.id;
-        final price = p.price![vm.region]!;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => vm.pickPlan(p.id),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: on ? AppColors.accent : AppColors.line, width: on ? 1.4 : 1),
-                boxShadow: on ? [BoxShadow(color: AppColors.accent.withOpacity(0.14), blurRadius: 18, offset: const Offset(0, 8))] : null,
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: on ? AppColors.accent : AppColors.line2, width: 2),
-                    ),
-                    alignment: Alignment.center,
-                    child: on ? Container(width: 10, height: 10, decoration: BoxDecoration(color: AppColors.accent, shape: BoxShape.circle)) : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${p.name}${p.hot ? ' · popular' : ''}', style: AppFonts.body(size: 15, weight: FontWeight.w700, color: AppColors.ink)),
-                        Text('${p.conversations} conversations · ${_fmtTok(p.tokens)} tokens', style: AppFonts.body(size: 12, color: AppColors.ink3)),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('${c.symbol}$price', style: AppFonts.display(size: 17)),
-                      Text('/ month', style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppColors.line2),
-              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-            ),
-            onPressed: vm.prevStep,
-            child: Text('Back', style: AppFonts.body(size: 14.5, weight: FontWeight.w600, color: AppColors.ink)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: _primaryButton(vm.submitting ? 'Creating…' : 'Create workspace', Icons.arrow_forward, vm.submitting ? null : () => _complete(vm))),
-        ],
-      ),
-    ];
-  }
-
-  String _fmtTok(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(n % 1000000 == 0 ? 0 : 1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}k';
-    return '$n';
   }
 
   Widget _label(String text, {bool mandatory = false}) => Text(

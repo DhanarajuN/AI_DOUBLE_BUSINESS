@@ -8,6 +8,13 @@ class JobTypeFieldOption {
         id: json['jobInstanceId']?.toString() ?? '',
         label: json['label']?.toString() ?? '',
       );
+
+  String get submissionValue => id.isEmpty ? label : '$label($id)';
+
+  static String labelOf(String submissionValue) {
+    final i = submissionValue.lastIndexOf('(');
+    return i > 0 && submissionValue.endsWith(')') ? submissionValue.substring(0, i) : submissionValue;
+  }
 }
 
 class JobTypeFieldQueryResult {
@@ -150,12 +157,14 @@ class JobTypeSchema {
     return null;
   }
 
-  List<String> optionsFor(JobTypeField field, {String? parentSelectionLabel}) {
-    if (!field.isQueryDriven) return field.staticOptions;
+  List<JobTypeFieldOption> optionsFor(JobTypeField field, {String? parentSelectionLabel}) {
+    if (!field.isQueryDriven) {
+      return field.staticOptions.map((s) => JobTypeFieldOption(id: '', label: s)).toList();
+    }
     final result = queries[field.queryKey];
     if (result == null) return const [];
-    if (result.singleLevel.isNotEmpty) return result.singleLevel.map((o) => o.label).toList();
+    if (result.singleLevel.isNotEmpty) return result.singleLevel;
     if (parentSelectionLabel == null) return const [];
-    return (result.twoLevelByParentLabel[parentSelectionLabel] ?? const []).map((o) => o.label).toList();
+    return result.twoLevelByParentLabel[parentSelectionLabel] ?? const [];
   }
 }
