@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import '../constants/server_urls.dart';
 import '../routes/app_routes.dart';
+import '../views/conversation_detail_view.dart';
 import 'app_logger.dart';
+import 'business_chat_service.dart';
 import 'session_storage.dart';
 
 /// Must be a top-level (or static) function — the FCM plugin runs it in a
@@ -114,12 +117,29 @@ class PushNotificationService {
     }
   }
 
-  void _openFromData(Map<String, dynamic> data) {
-    // The specific conversationId is carried for a future enhancement (deep
-    // link straight into that thread); today this opens the conversations
-    // list, which is already real navigable state and lets the business
-    // owner reach any conversation in one more tap.
-    AppLogger.i('PushNotification', 'Opening from notification, conversationId=${data['conversationId']}');
+  Future<void> _openFromData(Map<String, dynamic> data) async {
+    final conversationId = data['conversationId'] as String?;
+    AppLogger.i('PushNotification', 'Opening from notification, conversationId=$conversationId');
+
+    final businessId = await _sessionStorage.readBusinessId();
+    if (conversationId != null && conversationId.isNotEmpty && businessId != null && businessId.isNotEmpty) {
+      try {
+        final convo = await BusinessChatService.fetchConversation(conversationId, businessId);
+        final nav = navigatorKey.currentState;
+        if (convo != null && nav != null) {
+          nav.pushNamed(AppRoutes.businessConversations);
+          nav.push(MaterialPageRoute(
+            builder: (_) => ConversationDetailView(conversation: convo, businessId: businessId),
+          ));
+          return;
+        }
+      } catch (e, st) {
+        AppLogger.e('PushNotification', 'Could not fetch conversation for deep link', e, st);
+      }
+    }
+    // Fallback: couldn't resolve the specific conversation (not found, no
+    // businessId yet, or the fetch failed) — still land somewhere real and
+    // useful rather than nowhere.
     navigatorKey.currentState?.pushNamed(AppRoutes.businessConversations);
   }
 

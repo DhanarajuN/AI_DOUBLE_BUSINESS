@@ -77,6 +77,22 @@ class BusinessChatService {
     return ConversationsPage(list, j['nextCursor'] as String?);
   }
 
+  // Single-conversation lookup by id — used to deep-link a push notification
+  // tap straight into the specific conversation it was about (the list
+  // fetch above needs businessId up front and is paginated, so it can't
+  // answer "what conversation is this id" on its own).
+  static Future<GosureConversation?> fetchConversation(
+      String conversationId, String businessId) async {
+    final uri = Uri.parse(
+            '${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/$conversationId')
+        .replace(queryParameters: {'businessId': businessId});
+    final res = await http.get(uri, headers: await _headers());
+    AppLogger.i('BusinessChat', 'fetchConversation($conversationId) -> ${res.statusCode}');
+    if (res.statusCode == 404) return null;
+    if (res.statusCode < 200 || res.statusCode >= 300) throw await _err(res);
+    return GosureConversation.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
   // Hydrates a conversation's full history before the persistent event stream (below) takes
   // over for live updates. Uses the gosure-scoped history route (authorized by businessId
   // match), not the generic /api/messages/:conversationId — that one 403s here since it
