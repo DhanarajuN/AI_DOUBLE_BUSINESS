@@ -24,6 +24,18 @@ class ConversationsPage {
 class BusinessChatService {
   BusinessChatService._();
 
+  /// Fired on a 401 from any real business-conversation call below. Unlike
+  /// ApiClient's background bootstrap calls, every call here is something
+  /// the business user is actively waiting on (conversation list, message
+  /// history, sending a message, the live streams), so a 401 really does
+  /// mean the session is dead and should route through a clean sign-out
+  /// rather than fail silently with no way back to login.
+  static void Function()? onUnauthorized;
+
+  static void _checkAuth(int statusCode) {
+    if (statusCode == 401) onUnauthorized?.call();
+  }
+
   static final _sessionStorage = SessionStorage();
 
   // Gosure routes on this backend expect X-Tenant-Id/X-User-Id/X-Gosure-Token, not the
@@ -69,6 +81,7 @@ class BusinessChatService {
     final res = await http.get(uri, headers: await _headers());
     AppLogger.i('BusinessChat',
         'fetchConversations(businessId=$businessId) -> ${res.statusCode}');
+    _checkAuth(res.statusCode);
     if (res.statusCode < 200 || res.statusCode >= 300) throw await _err(res);
     final j = jsonDecode(res.body) as Map<String, dynamic>;
     final list = (j['conversations'] as List? ?? const [])
@@ -88,6 +101,7 @@ class BusinessChatService {
         .replace(queryParameters: {'businessId': businessId});
     final res = await http.get(uri, headers: await _headers());
     AppLogger.i('BusinessChat', 'fetchConversation($conversationId) -> ${res.statusCode}');
+    _checkAuth(res.statusCode);
     if (res.statusCode == 404) return null;
     if (res.statusCode < 200 || res.statusCode >= 300) throw await _err(res);
     return GosureConversation.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
@@ -106,6 +120,7 @@ class BusinessChatService {
     final res = await http.get(uri, headers: await _headers());
     AppLogger.i('BusinessChat',
         'fetchConversationHistory($conversationId) -> ${res.statusCode}');
+    _checkAuth(res.statusCode);
     if (res.statusCode < 200 || res.statusCode >= 300) throw await _err(res);
     final data = jsonDecode(res.body);
     if (data is! List) return [];
@@ -141,6 +156,7 @@ class BusinessChatService {
             .addAll({...await _headers(), 'Accept': 'text/event-stream'});
         final response = await c.send(request);
         AppLogger.i('BusinessChat', '$label -> ${response.statusCode}');
+        _checkAuth(response.statusCode);
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
           controller.addError(BusinessChatException(
@@ -219,6 +235,7 @@ class BusinessChatService {
     );
     AppLogger.i('BusinessChat',
         'setAgentChatMode($conversationId, $value) -> ${res.statusCode}');
+    _checkAuth(res.statusCode);
     if (res.statusCode < 200 || res.statusCode >= 300) throw await _err(res);
     final j = jsonDecode(res.body) as Map<String, dynamic>;
     return j['agentChatMode'] as bool? ?? value;
@@ -243,6 +260,7 @@ class BusinessChatService {
     );
     AppLogger.i('BusinessChat',
         'sendBusinessMessage($conversationId) -> ${res.statusCode}');
+    _checkAuth(res.statusCode);
     if (res.statusCode < 200 || res.statusCode >= 300) throw await _err(res);
     return GosureMessage.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }

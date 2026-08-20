@@ -9,6 +9,7 @@ import '../models/user.dart';
 import '../routes/app_routes.dart';
 import '../services/api_client.dart';
 import '../services/app_logger.dart';
+import '../services/business_chat_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/session_storage.dart';
 
@@ -30,6 +31,11 @@ class AuthRepository extends ChangeNotifier {
 
   AuthRepository(this._apiClient, this._sessionStorage) {
     _apiClient.onUnauthorized = _handleSessionExpired;
+    // Real conversation calls (list/history/send/toggle/stream) have no
+    // auth-recovery path of their own — a dead token there previously just
+    // failed silently with no way back to login. Wired to the same guarded
+    // handler as above.
+    BusinessChatService.onUnauthorized = _handleSessionExpired;
   }
 
   bool _handlingExpiry = false;
@@ -74,27 +80,18 @@ class AuthRepository extends ChangeNotifier {
   /// genuinely correct cached name is left untouched (no needless writes)
   /// and only a real mismatch triggers a correction.
   ///
-  /// Deliberately a raw http.get, NOT _apiClient.get — this call runs on
-  /// every single app launch with an existing session, and _apiClient has
-  /// onUnauthorized wired to force a full logout on any 401. A best-effort
-  /// background refresh must never be able to log a perfectly valid session
-  /// out just because this one non-critical call failed for any reason —
-  /// that would make a "fix a stale cached name" safeguard capable of
-  /// silently breaking normal login, which defeats the point of it being
-  /// best-effort in the first place.
+  /// Runs on every single app launch with an existing session — passes
+  /// `silent: true` so a 401 here (a permissions quirk on this specific
+  /// endpoint, a transient error, anything) is just a failed best-effort
+  /// refresh, never grounds to force-logout a perfectly valid session.
   Future<void> _refreshCurrentUserName() async {
     final user = _currentUser;
     if (user == null) return;
     try {
-      final response = await http.get(
-        Uri.parse('${ServerUrls.baseUrl}${ServerUrls.users}/${user.id}'),
-        headers: {
-          if (_apiClient.accessToken != null)
-            'Authorization': 'Bearer ${_apiClient.accessToken}',
-        },
+      final result = await _apiClient.get(
+        '${ServerUrls.users}/${user.id}',
+        silent: true,
       );
-      if (response.statusCode < 200 || response.statusCode >= 300) return;
-      final result = jsonDecode(response.body);
       if (result is! Map<String, dynamic>) return;
       final firstName = (result['firstName'] as String?)?.trim() ?? '';
       final lastName = (result['lastName'] as String?)?.trim() ?? '';
@@ -274,17 +271,11 @@ class AuthRepository extends ChangeNotifier {
   /// payload would blank those out — and leaves the denormalized accountRole and
   /// roleName stale at the old role if not also set explicitly. roleName follows
   /// the "<RoleName>(<roleId>)" format used by every SSO-created user record.
-  // A fire-and-forget background task after every fresh login — same reason
-  // _refreshCurrentUserName uses raw http.get, not _apiClient: any of these
-  // three calls 401ing (a role/user lookup unrelated to the login that just
-  // genuinely succeeded) must never trigger _apiClient's onUnauthorized and
-  // force the user straight back out, moments after they signed in.
-  Map<String, String> _rawAuthHeaders() => {
-        'Content-Type': 'application/json',
-        if (_apiClient.accessToken != null)
-          'Authorization': 'Bearer ${_apiClient.accessToken}',
-      };
-
+  // A fire-and-forget background task after every fresh login — all three
+  // calls use `silent: true` since any of them 401ing (a role/user lookup
+  // unrelated to the login that just genuinely succeeded) must never
+  // trigger _apiClient's onUnauthorized and force the user straight back
+  // out, moments after they signed in.
   Future<void> _promoteConfiguredRole(String userId) async {
     final roleName =
         await _resolveConfiguredRoleName(ServerUrls.ssoCallbackScheme);
@@ -294,27 +285,15 @@ class AuthRepository extends ChangeNotifier {
       );
     }
 
-    final roleRes = await http.get(
-        Uri.parse('${ServerUrls.baseUrl}${ServerUrls.rolesByName}/$roleName'),
-        headers: _rawAuthHeaders());
-    if (roleRes.statusCode < 200 || roleRes.statusCode >= 300) {
-      throw Exception(
-          'GET ${ServerUrls.rolesByName}/$roleName failed (${roleRes.statusCode})');
-    }
-    final roleResult = jsonDecode(roleRes.body);
+    final roleResult = await _apiClient
+        .get('${ServerUrls.rolesByName}/$roleName', silent: true);
     final roleId = roleResult is Map ? roleResult['id'] as String? : null;
     if (roleId == null) {
       throw Exception('Role "$roleName" not found for this tenant');
     }
 
-    final userRes = await http.get(
-        Uri.parse('${ServerUrls.baseUrl}${ServerUrls.users}/$userId'),
-        headers: _rawAuthHeaders());
-    if (userRes.statusCode < 200 || userRes.statusCode >= 300) {
-      throw Exception(
-          'GET ${ServerUrls.users}/$userId failed (${userRes.statusCode})');
-    }
-    final userResult = jsonDecode(userRes.body);
+    final userResult =
+        await _apiClient.get('${ServerUrls.users}/$userId', silent: true);
     if (userResult is! Map<String, dynamic>) {
       throw Exception('Unexpected response fetching user $userId');
     }
@@ -330,10 +309,8 @@ class AuthRepository extends ChangeNotifier {
       ..['roleId'] = roleId
       ..['accountRole'] = accountRole
       ..['roleName'] = '$roleName($roleId)';
-    await http.put(
-        Uri.parse('${ServerUrls.baseUrl}${ServerUrls.usersUpdate}/$userId'),
-        headers: _rawAuthHeaders(),
-        body: jsonEncode(updated));
+    await _apiClient.put('${ServerUrls.usersUpdate}/$userId',
+        body: updated, silent: true);
     AppLogger.i('AuthRepository', 'Promoted user $userId to $roleName');
   }
 
