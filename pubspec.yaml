@@ -18,6 +18,9 @@ dependencies:
   flutter_web_auth_2: ^4.1.0
   flutter_markdown_plus: ^1.0.0+1
   url_launcher: ^6.3.1
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:

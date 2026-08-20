@@ -2,6 +2,7 @@ import 'dart:convert';
 import '../constants/server_urls.dart';
 import 'api_client.dart';
 import 'app_logger.dart';
+import 'push_notification_service.dart';
 import 'session_storage.dart';
 
 Future<void> resolveBusinessForEmail(
@@ -46,6 +47,11 @@ Future<void> resolveBusinessForEmail(
     if (id != null && id.isNotEmpty) {
       await sessionStorage.saveBusinessId(id);
       AppLogger.i('BusinessLookup', 'Resolved businessId: $id');
+      // Re-registers the FCM token now carrying businessId — the earlier
+      // registration right after login (auth_repository.dart) ran before
+      // this resolved, so it went up without one. Same token, upsert by
+      // token server-side, so this just fills in what was missing.
+      await PushNotificationService().registerForCurrentUser();
     } else {
       AppLogger.w('BusinessLookup', 'Business record had no id: $job');
     }

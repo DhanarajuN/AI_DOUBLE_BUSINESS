@@ -9,6 +9,7 @@ import '../models/user.dart';
 import '../routes/app_routes.dart';
 import '../services/api_client.dart';
 import '../services/app_logger.dart';
+import '../services/push_notification_service.dart';
 import '../services/session_storage.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
@@ -51,6 +52,7 @@ class AuthRepository extends ChangeNotifier {
       _apiClient.setAccessToken(session.accessToken);
       _currentUser = session.user;
       _status = AuthStatus.authenticated;
+      unawaited(PushNotificationService().registerForCurrentUser());
     }
     notifyListeners();
   }
@@ -177,6 +179,13 @@ class AuthRepository extends ChangeNotifier {
     _apiClient.setAccessToken(accessToken);
     _currentUser = user;
     _status = AuthStatus.authenticated;
+    // businessId (if any) isn't resolved yet at this exact point — that
+    // happens separately, right after this, via business_lookup_service.dart
+    // from the splash/login/signup views — which registers again once it's
+    // known. Registering here too means a returning user with no business
+    // change still gets a token registered immediately, not just on next
+    // restart.
+    unawaited(PushNotificationService().registerForCurrentUser());
 
     // Every login from this app should carry whatever role is configured for
     // it, regardless of what the account's SSO-created default role was.
@@ -298,6 +307,7 @@ class AuthRepository extends ChangeNotifier {
 
   Future<void> logout() async {
     AppLogger.i('AuthRepository', 'logout');
+    await PushNotificationService().unregister();
     await _sessionStorage.clearSession();
     await _sessionStorage.clearBusinessData();
     _apiClient.setAccessToken(null);
