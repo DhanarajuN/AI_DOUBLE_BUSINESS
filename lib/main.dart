@@ -124,6 +124,7 @@ class _AiDoubleBusinessAppState extends State<AiDoubleBusinessApp>
             title: AppConstants.appName,
             debugShowCheckedModeBanner: false,
             theme: buildAppTheme(),
+            navigatorKey: navigatorKey,
             initialRoute: AppRoutes.splash,
             onGenerateRoute: AppRoutes.onGenerateRoute,
             navigatorObservers: [AppNavigatorObserver(), routeObserver],
