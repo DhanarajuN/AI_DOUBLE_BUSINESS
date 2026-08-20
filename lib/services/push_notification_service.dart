@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import '../constants/server_urls.dart';
+import '../firebase_options.dart';
 import '../routes/app_routes.dart';
 import '../views/conversation_detail_view.dart';
 import 'app_logger.dart';
@@ -51,11 +52,10 @@ class PushNotificationService {
     _initialized = true;
 
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     } catch (e, st) {
-      // No google-services.json/GoogleService-Info.plist dropped in yet —
-      // expected until the real Firebase project credentials are wired in.
-      // Every other feature in this app must keep working regardless.
+      // Guards against any future regeneration leaving this stale/missing —
+      // every other feature in this app must keep working regardless.
       AppLogger.e('PushNotification', 'Firebase.initializeApp failed — push notifications disabled', e, st);
       return;
     }
