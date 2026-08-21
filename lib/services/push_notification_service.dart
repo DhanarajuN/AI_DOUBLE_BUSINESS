@@ -38,6 +38,7 @@ class PushNotificationService {
   static final _sessionStorage = SessionStorage();
   final _localNotifications = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  Future<void>? _initializing;
   String? _lastKnownToken;
 
   static const _androidChannel = AndroidNotificationChannel(
@@ -47,10 +48,11 @@ class PushNotificationService {
     importance: Importance.high,
   );
 
-  Future<void> initialize() async {
-    if (_initialized) return;
-    _initialized = true;
+  Future<void> initialize() {
+    return _initializing ??= _initialize();
+  }
 
+  Future<void> _initialize() async {
     try {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     } catch (e, st) {
@@ -59,6 +61,7 @@ class PushNotificationService {
       AppLogger.e('PushNotification', 'Firebase.initializeApp failed — push notifications disabled', e, st);
       return;
     }
+    _initialized = true;
 
     FirebaseMessaging.onBackgroundMessage(gosureBackgroundMessageHandler);
 
@@ -149,6 +152,7 @@ class PushNotificationService {
   /// business" for an incoming customer message without a fresh ownership
   /// lookup on every send.
   Future<void> registerForCurrentUser() async {
+    if (_initializing != null) await _initializing;
     if (!_initialized) return;
     try {
       final token = await FirebaseMessaging.instance.getToken();

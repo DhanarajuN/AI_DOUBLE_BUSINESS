@@ -683,6 +683,19 @@ String _humanizeKey(String key) {
   return spaced[0].toUpperCase() + spaced.substring(1);
 }
 
+String _stripTrailingId(String value) =>
+    value.replaceAll(RegExp(r'\s*\([^)]*\)\s*$'), '').trim();
+
+String _formatDetailValue(String raw) {
+  final value = _stripTrailingId(stripHtml(raw));
+  final dt = DateTime.tryParse(value);
+  if (dt == null) return value;
+  final local = dt.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
+}
+
 Widget orderRow(BuildContext context, Map<String, dynamic> order) {
   final data = orderData(order);
   final title = orderTitle(order, data);
@@ -784,7 +797,7 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
                   if (fields.isEmpty)
                     _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
                   else
-                    ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
+                    ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), _formatDetailValue(e.value.toString()))),
                   _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
                   const SizedBox(height: 4),
                   SizedBox(
@@ -931,7 +944,7 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
               if (fields.isEmpty)
                 _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
               else
-                ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
+                ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), _formatDetailValue(e.value.toString()))),
               _detailRow(Icons.tag, 'Booking ID', _shortId(booking, full: true)),
               const SizedBox(height: 4),
               SizedBox(
