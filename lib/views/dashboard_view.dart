@@ -9,7 +9,6 @@ import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../widgets/business_icons.dart';
 import 'home_shell_view.dart';
-import 'plans_view.dart';
 
 String fmtN(num n) => n.round().toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -80,10 +79,7 @@ class _DashboardBody extends StatelessWidget {
     final heroCategory = firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
     final heroHours = firstNonEmpty(data, const ['Availabilty Times', 'Availability Times'])?.split('(').first.trim();
     final plan = planById(biz.planId);
-    final c = kCurrencies[vm.currency]!;
     final bks = vm.bookings;
-    final totalTok = vm.usageIn + vm.usageOut;
-    final monthTok = vm.usageDaily.fold<int>(0, (a, b) => a + b);
     final now = DateTime.now();
     final bksWeek = bks.where((b) {
       final created = parseDate(b['createdAt']);
@@ -114,7 +110,7 @@ class _DashboardBody extends StatelessWidget {
             children: [
               _hero(heroName, heroOwner, greet, heroCategory, heroHours, plan),
               const SizedBox(height: 14),
-              _kpiGrid(context, bks.length, totalTok, plan, vm.ordersCount),
+              _kpiGrid(context, bks.length, vm.ordersCount),
               _sectionHeader('Bookings', 'Calendar →', () => _goTab(context, 1)),
               _card(
                 child: Column(
@@ -152,79 +148,6 @@ class _DashboardBody extends StatelessWidget {
                       _empty('No orders yet.')
                     else
                       ...orders.take(5).map((o) => orderRow(context, o)),
-                  ],
-                ),
-              ),
-              _sectionHeader('AI usage', '${fmtN(vm.usageCalls)} calls', null),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(fmtTok(monthTok), style: AppFonts.display(size: 24)),
-                              Text('tokens this period', style: AppFonts.body(size: 11.5, color: AppColors.ink3)),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('In ${fmtTok(vm.usageIn)}', style: AppFonts.mono(size: 10.5)),
-                            Text('Out ${fmtTok(vm.usageOut)}', style: AppFonts.mono(size: 10.5)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _barChart(vm.usageDaily),
-                    const SizedBox(height: 12),
-                    _meterLine('Included in ${plan.name}', plan.tokens > 0 ? '${fmtTok(totalTok)} / ${fmtTok(plan.tokens)}' : 'Unlimited'),
-                    const SizedBox(height: 6),
-                    _meter(totalTok, plan.tokens),
-                  ],
-                ),
-              ),
-              _sectionHeader('Your plan', 'Manage →', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlansView()))),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(plan.name, style: AppFonts.display(size: 20)),
-                              Text(
-                                plan.price != null ? '${c.symbol}${fmtN(plan.price![vm.currency]!)} / month' : 'Custom pricing',
-                                style: AppFonts.body(size: 12, color: AppColors.ink3),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlansView())),
-                          child: Text(plan.id == 'pro' || plan.id == 'enterprise' ? 'Manage' : 'Upgrade', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _meterLine('Conversations', plan.conversations > 0 ? '${fmtN(bks.length)} / ${fmtN(plan.conversations)}' : fmtN(bks.length)),
-                    const SizedBox(height: 6),
-                    _meter(bks.length, plan.conversations),
                   ],
                 ),
               ),
@@ -345,7 +268,7 @@ class _DashboardBody extends StatelessWidget {
         ],
       );
 
-  Widget _kpiGrid(BuildContext context, int bookings, int tokens, Plan plan, int ordersCount) {
+  Widget _kpiGrid(BuildContext context, int bookings, int ordersCount) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -356,8 +279,6 @@ class _DashboardBody extends StatelessWidget {
       children: [
         _kpi(Icons.calendar_month_outlined, fmtN(bookings), 'Bookings', AppColors.accent, AppColors.accentSoft, () => _goTab(context, 1)),
         _kpi(Icons.shopping_bag_outlined, fmtN(ordersCount), 'Orders', const Color(0xFF4F46E5), const Color(0x194F46E5), () => _goTab(context, 2)),
-        _kpi(Icons.local_offer_outlined, plan.name, 'Current plan', AppColors.amber, const Color(0x19B45309), () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlansView()))),
-        _kpi(Icons.bar_chart_outlined, fmtTok(tokens), 'AI tokens used', AppColors.ok, const Color(0x190E8A5F), null),
       ],
     );
   }
@@ -431,50 +352,6 @@ class _DashboardBody extends StatelessWidget {
         child: Text(text, textAlign: TextAlign.center, style: AppFonts.body(size: 12.5, color: AppColors.ink3)),
       );
 
-  Widget _barChart(List<int> arr) {
-    final max = arr.isEmpty ? 1 : arr.reduce((a, b) => a > b ? a : b).clamp(1, 1 << 30);
-    return SizedBox(
-      height: 60,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(arr.length, (i) {
-          final h = (arr[i] / max * 100).clamp(6, 100).toDouble();
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: FractionallySizedBox(
-                heightFactor: h / 100,
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: i == arr.length - 1 ? AppColors.accent : AppColors.line2,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
-  Widget _meterLine(String label, String value) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: AppFonts.body(size: 11.5, color: AppColors.ink2)),
-          Text(value, style: AppFonts.body(size: 11.5, color: AppColors.ink2)),
-        ],
-      );
-
-  Widget _meter(num used, num cap) {
-    final pct = cap <= 0 ? 0.22 : (used / cap).clamp(0.0, 1.0);
-    final color = pct >= 0.9 ? AppColors.danger : pct >= 0.7 ? AppColors.amber : AppColors.accent;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(100),
-      child: LinearProgressIndicator(value: pct, minHeight: 8, backgroundColor: AppColors.paper2, valueColor: AlwaysStoppedAnimation(color)),
-    );
-  }
 }
 
 Widget _detailRow(IconData icon, String label, String value) => Padding(
@@ -538,15 +415,6 @@ String stripHtml(String input) {
       .trim();
 }
 
-const kOrderLifecycle = ['Placed', 'Accepted', 'In Transit', 'Delivered'];
-
-bool _isCancelledStatus(String? status) => (status ?? '').toLowerCase() == 'cancelled';
-
-int _lifecycleIndexOf(String? status) {
-  if (status == null) return -1;
-  return kOrderLifecycle.indexWhere((s) => s.toLowerCase() == status.toLowerCase());
-}
-
 String? orderStatusOf(Map<String, dynamic> order) {
   final jobLevelStatus = order[AppConstants.fieldCurrentJobStatus];
   if (jobLevelStatus is String && jobLevelStatus.trim().isNotEmpty) {
@@ -571,109 +439,6 @@ Color orderStatusColor(String? status) {
   if (s.contains('cancel') || s.contains('fail') || s.contains('reject')) return AppColors.danger;
   if (s.contains('placed') || s.contains('pend')) return AppColors.ink3;
   return AppColors.accent;
-}
-
-Widget _orderStatusStepper(
-  Map<String, dynamic> order,
-  String? status,
-  DashboardViewModel vm,
-  StateSetter setSheetState,
-) {
-  if (_isCancelledStatus(status)) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.danger.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          const Icon(Icons.cancel_outlined, size: 18, color: AppColors.danger),
-          const SizedBox(width: 8),
-          Text('This order was cancelled', style: AppFonts.body(size: 13, weight: FontWeight.w600, color: AppColors.danger)),
-        ],
-      ),
-    );
-  }
-
-  final currentIndex = _lifecycleIndexOf(status);
-  final delivered = currentIndex == kOrderLifecycle.length - 1;
-
-  void advanceTo(String stage) {
-    vm.updateOrderStatus(order, stage);
-    setSheetState(() {});
-  }
-
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (status != null && currentIndex == -1)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text('Current: $status', style: AppFonts.body(size: 12, color: AppColors.ink3)),
-        ),
-      ...List.generate(kOrderLifecycle.length, (i) {
-        final stage = kOrderLifecycle[i];
-        final done = i <= currentIndex;
-        final isNext = i == currentIndex + 1;
-        final color = done ? orderStatusColor(stage) : (isNext ? AppColors.accent : AppColors.line2);
-        return InkWell(
-          onTap: isNext ? () => advanceTo(stage) : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  children: [
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: done ? color : Colors.transparent,
-                        border: Border.all(color: color, width: 2),
-                      ),
-                      alignment: Alignment.center,
-                      child: done ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
-                    ),
-                    if (i != kOrderLifecycle.length - 1)
-                      Container(width: 2, height: 20, color: i < currentIndex ? orderStatusColor(stage) : AppColors.line2),
-                  ],
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      stage,
-                      style: AppFonts.body(
-                        size: 13.5,
-                        weight: done || isNext ? FontWeight.w600 : FontWeight.w400,
-                        color: done ? AppColors.ink : (isNext ? AppColors.accent : AppColors.ink3),
-                      ),
-                    ),
-                  ),
-                ),
-                if (isNext) Icon(Icons.arrow_forward, size: 14, color: AppColors.accent),
-              ],
-            ),
-          ),
-        );
-      }),
-      if (!delivered) ...[
-        const SizedBox(height: 6),
-        TextButton.icon(
-          onPressed: () => advanceTo('Cancelled'),
-          icon: const Icon(Icons.close, size: 15, color: AppColors.danger),
-          label: Text('Cancel order', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.danger)),
-          style: TextButton.styleFrom(
-            padding: EdgeInsets.zero,
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ),
-      ],
-    ],
-  );
 }
 
 String _humanizeKey(String key) {
@@ -702,6 +467,8 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
   final rawSubtitle = firstNonEmpty(data, const ['Item Name', 'Item', 'Product Name', 'Product', 'Service', 'Status']);
   final subtitle = rawSubtitle == null ? 'Tap for details' : stripHtml(rawSubtitle);
   final created = parseDate(order['createdAt']);
+  final status = orderStatusOf(order);
+  final statusColor = orderStatusColor(status);
   return InkWell(
     borderRadius: BorderRadius.circular(10),
     onTap: () => showOrderDetail(context, order),
@@ -726,10 +493,23 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
               ],
             ),
           ),
-          if (created != null) ...[
-            Text(timeAgo(created), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
-            const SizedBox(width: 4),
-          ],
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (status != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
+                  child: Text(status, style: AppFonts.mono(size: 9.5, color: statusColor)),
+                ),
+              if (created != null) ...[
+                const SizedBox(height: 4),
+                Text(timeAgo(created), style: AppFonts.body(size: 10.5, color: AppColors.ink3)),
+              ],
+            ],
+          ),
+          const SizedBox(width: 4),
           Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
         ],
       ),
@@ -738,7 +518,6 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
 }
 
 void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
-  final vm = context.read<DashboardViewModel>();
   final title = orderTitle(order, orderData(order));
   final created = parseDate(order['createdAt']);
 
@@ -750,7 +529,6 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setSheetState) {
         final data = orderData(order);
-        final status = orderStatusOf(order);
         final fields = data.entries
             .where((e) => e.key.toLowerCase() != 'status')
             .where((e) => e.value is String || e.value is num || e.value is bool)
@@ -790,10 +568,6 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
                   ),
                   const SizedBox(height: 20),
                   if (created != null) _detailRow(Icons.event_outlined, 'Created', fmtDateTime(created)),
-                  Text('Status', style: AppFonts.body(size: 11, color: AppColors.ink3)),
-                  const SizedBox(height: 10),
-                  _orderStatusStepper(order, status, vm, setSheetState),
-                  const SizedBox(height: 16),
                   if (fields.isEmpty)
                     _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
                   else
