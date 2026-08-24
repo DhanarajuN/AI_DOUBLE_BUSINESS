@@ -61,6 +61,10 @@ class JobTypeField {
   final String allowedValuesRaw;
   final String uniqueFieldId;
   final String rule;
+  final bool isHtmlViewOnly;
+  final String defaultValue;
+  final String mask;
+  final bool enableAddMore;
 
   const JobTypeField({
     required this.langLabel,
@@ -75,6 +79,10 @@ class JobTypeField {
     required this.allowedValuesRaw,
     required this.uniqueFieldId,
     required this.rule,
+    this.isHtmlViewOnly = false,
+    this.defaultValue = '',
+    this.mask = '',
+    this.enableAddMore = false,
   });
 
   factory JobTypeField.fromJson(Map<String, dynamic> json) => JobTypeField(
@@ -90,11 +98,47 @@ class JobTypeField {
         allowedValuesRaw: json['allowedValues']?.toString() ?? '',
         uniqueFieldId: json['uniqueFieldId']?.toString() ?? '',
         rule: json['rule']?.toString() ?? '',
+        isHtmlViewOnly: json['isHtmlViewOnly'] == true,
+        defaultValue: json['defaultValue']?.toString() ?? '',
+        mask: json['mask']?.toString() ?? '',
+        enableAddMore: json['enableAddMore'] == true,
       );
 
   String get label => displayName.isNotEmpty ? displayName : name;
 
   bool get isSubJob => type == 'SubJob';
+
+  bool get isReport => type == 'Report';
+
+  bool get isAutoDate => type == 'Auto_Date' || type == 'Auto Date';
+
+  bool get isAutoDateTime => type == 'Auto_Date_Time';
+
+  bool get isReadOnlyLoginEmail => type == 'Read_Only_Login_Email';
+
+  bool get isAddOrderCounter => rule == 'ADD_ORDER';
+
+  bool get isReadOnlyAuto => isAutoDate || isAutoDateTime || isReadOnlyLoginEmail || isAddOrderCounter;
+
+  bool get isBoolean => type == 'BOOLEAN';
+
+  bool get isRadioOrCheckbox => type == 'Radio_OR_CheckBox';
+
+  bool get isTextArea => type == 'Text_Area';
+
+  bool get isFile => type == 'Attachment' || type == 'File';
+
+  bool get isSelection => type == 'Selection' || type == 'API_Selection';
+
+  bool get isDatePicker => type == 'Date' || type == 'Date_Time';
+
+  bool get isHtmlText => type == 'Large_Text' && isHtmlViewOnly;
+
+  bool get isEmail => type == 'Email';
+
+  bool get isPhoneNumber => type == 'Phone Number' || type == 'Phone_Number';
+
+  bool get hasPercentRule => rule.contains('PERCENT') || rule.contains('Percentage');
 
   bool get isQueryDriven => allowedValuesRaw.startsWith('q:');
 

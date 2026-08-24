@@ -374,7 +374,8 @@ class _OrdersBodyState extends State<_OrdersBody> {
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: () => showOrderDetail(context, order),
+      onTap: () => showOrderDetail(context, order,
+          onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(

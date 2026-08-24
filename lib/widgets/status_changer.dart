@@ -13,6 +13,7 @@ class StatusChanger extends StatefulWidget {
   final String? currentStatus;
   final Color Function(String? status) statusColor;
   final ValueChanged<String>? onChanged;
+  final Future<bool> Function(JobStatusOption option)? onNeedsForm;
 
   const StatusChanger({
     super.key,
@@ -20,6 +21,7 @@ class StatusChanger extends StatefulWidget {
     required this.currentStatus,
     required this.statusColor,
     this.onChanged,
+    this.onNeedsForm,
   });
 
   @override
@@ -64,7 +66,16 @@ class _StatusChangerState extends State<StatusChanger> {
     }
   }
 
-  Future<void> _changeTo(String newStatus) async {
+  Future<void> _changeTo(JobStatusOption option) async {
+    if (option.requiresSubJobForm) {
+      final onNeedsForm = widget.onNeedsForm;
+      if (onNeedsForm != null) {
+        final completed = await onNeedsForm(option);
+        if (!mounted || !completed) return;
+      }
+    }
+
+    final newStatus = option.secondaryStatus;
     setState(() => _submitting = true);
     try {
       await updateJobStatus(context.read<ApiClient>(), instanceId: widget.instanceId, status: newStatus);
@@ -124,10 +135,10 @@ class _StatusChangerState extends State<StatusChanger> {
 
     if (_loadingOptions || _options.isEmpty) return pill;
 
-    return PopupMenuButton<String>(
+    return PopupMenuButton<JobStatusOption>(
       onSelected: _changeTo,
       itemBuilder: (ctx) => _options
-          .map((o) => PopupMenuItem<String>(value: o.secondaryStatus, child: Text(o.secondaryStatus)))
+          .map((o) => PopupMenuItem<JobStatusOption>(value: o, child: Text(o.secondaryStatus)))
           .toList(),
       child: Row(
         mainAxisSize: MainAxisSize.min,

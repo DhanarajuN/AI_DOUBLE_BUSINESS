@@ -4,12 +4,15 @@ import '../constants/app_constants.dart';
 import '../models/plan.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
+import '../services/job_instance_update_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
+import '../utils/date_format.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../widgets/business_icons.dart';
 import '../widgets/status_changer.dart';
 import 'home_shell_view.dart';
+import 'job_instance_edit_view.dart';
 
 String fmtN(num n) => n.round().toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -105,7 +108,7 @@ class _DashboardBody extends StatelessWidget {
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.accent,
-          onRefresh: () async {},
+          onRefresh: vm.refresh,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
             children: [
@@ -442,6 +445,37 @@ Color orderStatusColor(String? status) {
   return AppColors.accent;
 }
 
+Widget closeEditRow(BuildContext ctx, VoidCallback onEdit) {
+  return Row(
+    children: [
+      Expanded(
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: AppColors.line2),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+          ),
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+          ),
+          onPressed: onEdit,
+          child: Text('Edit', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: Colors.white)),
+        ),
+      ),
+    ],
+  );
+}
+
 String _humanizeKey(String key) {
   if (key.contains(' ')) return key;
   final spaced = key.replaceAllMapped(RegExp(r'(?<=[a-z0-9])(?=[A-Z])'), (m) => ' ');
@@ -449,17 +483,18 @@ String _humanizeKey(String key) {
   return spaced[0].toUpperCase() + spaced.substring(1);
 }
 
-String _stripTrailingId(String value) =>
-    value.replaceAll(RegExp(r'\s*\([^)]*\)\s*$'), '').trim();
+final _trailingIdPattern = RegExp(r'\s*\([^()]*\)\s*$');
+
+String _stripTrailingId(String value) => value
+    .split(',')
+    .map((part) => part.replaceAll(_trailingIdPattern, '').trim())
+    .join(', ');
 
 String _formatDetailValue(String raw) {
   final value = _stripTrailingId(stripHtml(raw));
   final dt = DateTime.tryParse(value);
   if (dt == null) return value;
-  final local = dt.toLocal();
-  final day = local.day.toString().padLeft(2, '0');
-  final month = local.month.toString().padLeft(2, '0');
-  return '$day/$month/${local.year}';
+  return fmtDateDMY(dt);
 }
 
 Widget orderRow(BuildContext context, Map<String, dynamic> order) {
@@ -472,7 +507,8 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
   final statusColor = orderStatusColor(status);
   return InkWell(
     borderRadius: BorderRadius.circular(10),
-    onTap: () => showOrderDetail(context, order),
+    onTap: () => showOrderDetail(context, order,
+        onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -518,11 +554,11 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
   );
 }
 
-void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
+void showOrderDetail(BuildContext context, Map<String, dynamic> order,
+    {required void Function(Map<String, dynamic> order, String status) onStatusChanged}) {
   final title = orderTitle(order, orderData(order));
   final created = parseDate(order['createdAt']);
   final instanceId = (order['id'] ?? order['_id'])?.toString() ?? '';
-  final vm = context.read<DashboardViewModel>();
 
   showModalBottomSheet(
     context: context,
@@ -572,9 +608,19 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
                         currentStatus: orderStatusOf(order),
                         statusColor: orderStatusColor,
                         onChanged: (s) {
-                          vm.updateOrderStatus(order, s);
+                          onStatusChanged(order, s);
                           setSheetState(() {});
                         },
+                        onNeedsForm: (option) => Navigator.of(context).push<bool>(MaterialPageRoute(
+                              builder: (_) => JobInstanceEditView(
+                                title: 'Add ${option.subJobTypeName}',
+                                jobTypeName: option.subJobTypeName!,
+                                instanceId: '',
+                                initialData: const {},
+                                onSave: (id, values) => updateJobInstanceData(
+                                    context.read<ApiClient>(), instanceId: id, data: values),
+                              ),
+                            )).then((completed) => completed ?? false),
                       ),
                     ],
                   ),
@@ -586,18 +632,19 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
                     ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), _formatDetailValue(e.value.toString()))),
                   _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
                   const SizedBox(height: 4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: AppColors.line2),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                  closeEditRow(ctx, () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => JobInstanceEditView(
+                        title: 'Edit Order',
+                        jobTypeName: AppConstants.jobTypeOrders,
+                        instanceId: instanceId,
+                        initialData: data,
+                        onSave: (id, values) => updateJobInstanceData(
+                            context.read<ApiClient>(), instanceId: id, data: values),
                       ),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                    ),
-                  ),
+                    ));
+                  }),
                 ],
               ),
             ),
@@ -618,7 +665,8 @@ Widget bookingRow(BuildContext context, Map<String, dynamic> booking) {
   final color = orderStatusColor(status);
   return InkWell(
     borderRadius: BorderRadius.circular(10),
-    onTap: () => showBookingDetail(context, booking),
+    onTap: () => showBookingDetail(context, booking,
+        onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -663,12 +711,12 @@ Widget bookingRow(BuildContext context, Map<String, dynamic> booking) {
   );
 }
 
-void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
+void showBookingDetail(BuildContext context, Map<String, dynamic> booking,
+    {required void Function(Map<String, dynamic> booking, String status) onStatusChanged}) {
   final data = orderData(booking);
   final title = firstNonEmpty(data, const ['Customer Name', 'Name', 'Full Name']) ?? 'Booking ${_shortId(booking)}';
   final created = parseDate(booking['createdAt']);
   final instanceId = (booking['id'] ?? booking['_id'])?.toString() ?? '';
-  final vm = context.read<DashboardViewModel>();
   final fields = data.entries
       .where((e) => e.key.toLowerCase() != 'status')
       .where((e) => e.value is String || e.value is num || e.value is bool)
@@ -718,7 +766,17 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
                           instanceId: instanceId,
                           currentStatus: orderStatusOf(booking),
                           statusColor: orderStatusColor,
-                          onChanged: (s) => vm.updateOrderStatus(booking, s),
+                          onChanged: (s) => onStatusChanged(booking, s),
+                          onNeedsForm: (option) => Navigator.of(context).push<bool>(MaterialPageRoute(
+                                builder: (_) => JobInstanceEditView(
+                                  title: 'Add ${option.subJobTypeName}',
+                                  jobTypeName: option.subJobTypeName!,
+                                  instanceId: '',
+                                  initialData: const {},
+                                  onSave: (id, values) => updateJobInstanceData(
+                                      context.read<ApiClient>(), instanceId: id, data: values),
+                                ),
+                              )).then((completed) => completed ?? false),
                         ),
                       ],
                     ),
@@ -733,18 +791,19 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
                 ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), _formatDetailValue(e.value.toString()))),
               _detailRow(Icons.tag, 'Booking ID', _shortId(booking, full: true)),
               const SizedBox(height: 4),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: AppColors.line2),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+              closeEditRow(ctx, () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => JobInstanceEditView(
+                    title: 'Edit Booking',
+                    jobTypeName: AppConstants.jobTypeBookings,
+                    instanceId: instanceId,
+                    initialData: data,
+                    onSave: (id, values) =>
+                        updateJobInstanceData(context.read<ApiClient>(), instanceId: id, data: values),
                   ),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                ),
-              ),
+                ));
+              }),
             ],
           ),
         ),
