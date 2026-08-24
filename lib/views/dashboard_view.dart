@@ -8,6 +8,7 @@ import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../widgets/business_icons.dart';
+import '../widgets/status_changer.dart';
 import 'home_shell_view.dart';
 
 String fmtN(num n) => n.round().toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
@@ -520,6 +521,8 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
 void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
   final title = orderTitle(order, orderData(order));
   final created = parseDate(order['createdAt']);
+  final instanceId = (order['id'] ?? order['_id'])?.toString() ?? '';
+  final vm = context.read<DashboardViewModel>();
 
   showModalBottomSheet(
     context: context,
@@ -564,6 +567,15 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order) {
                       ),
                       const SizedBox(width: 12),
                       Expanded(child: Text(title, style: AppFonts.display(size: 17))),
+                      StatusChanger(
+                        instanceId: instanceId,
+                        currentStatus: orderStatusOf(order),
+                        statusColor: orderStatusColor,
+                        onChanged: (s) {
+                          vm.updateOrderStatus(order, s);
+                          setSheetState(() {});
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -655,7 +667,8 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
   final data = orderData(booking);
   final title = firstNonEmpty(data, const ['Customer Name', 'Name', 'Full Name']) ?? 'Booking ${_shortId(booking)}';
   final created = parseDate(booking['createdAt']);
-  final status = orderStatusOf(booking);
+  final instanceId = (booking['id'] ?? booking['_id'])?.toString() ?? '';
+  final vm = context.read<DashboardViewModel>();
   final fields = data.entries
       .where((e) => e.key.toLowerCase() != 'status')
       .where((e) => e.value is String || e.value is num || e.value is bool)
@@ -700,14 +713,13 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking) {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(title, style: AppFonts.display(size: 17)),
-                        if (status != null) ...[
-                          const SizedBox(height: 2),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: orderStatusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-                            child: Text(status, style: AppFonts.mono(size: 10, color: orderStatusColor(status))),
-                          ),
-                        ],
+                        const SizedBox(height: 4),
+                        StatusChanger(
+                          instanceId: instanceId,
+                          currentStatus: orderStatusOf(booking),
+                          statusColor: orderStatusColor,
+                          onChanged: (s) => vm.updateOrderStatus(booking, s),
+                        ),
                       ],
                     ),
                   ),

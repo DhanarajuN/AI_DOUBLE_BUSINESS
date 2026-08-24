@@ -34,6 +34,9 @@ class ServerUrls {
 
   static const String jobInstances = '/api/v1/job-instances';
 
+  static const String updateWorkflowStatus =
+      '/api/v1/job-instances/update-workflow-status';
+
   static const String publicInstanceCreate = '/api/v1/public/create-instance';
 
   static const String s3ObjectDownload = '/api/v1/s3-objects/download';
