@@ -71,6 +71,17 @@ class BusinessConversationsViewModel extends ChangeNotifier {
         _businessId == null) {
       return;
     }
+    // Prefer the server-resolved name already denormalized onto the
+    // conversation (see GosureConversation.customerName) — reliable, and
+    // needs no extra network round trip. Only conversations created before
+    // that resolution existed will lack it, in which case fall back to the
+    // older per-message senderName lookup below.
+    final serverName = _cleanName(anyConversation.customerName);
+    if (serverName != null) {
+      _userDisplayNames[user] = serverName;
+      notifyListeners();
+      return;
+    }
     _pendingDisplayNameFetches.add(user);
     try {
       final history = await BusinessChatService.fetchConversationHistory(
