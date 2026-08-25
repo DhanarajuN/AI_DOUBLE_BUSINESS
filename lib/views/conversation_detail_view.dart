@@ -7,6 +7,7 @@ import '../repositories/business_conversations_repository.dart';
 import '../services/friendly_error.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/conversation_detail_view_model.dart';
+import 'business_conversations_view.dart' show conversationDisplayTitle;
 
 class ConversationDetailView extends StatelessWidget {
   final GosureConversation conversation;
@@ -190,9 +191,7 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          convo.title?.isNotEmpty == true
-                              ? convo.title!
-                              : convo.conversationId,
+                          conversationDisplayTitle(convo),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppFonts.body(

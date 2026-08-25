@@ -5,6 +5,7 @@ import '../models/field_rule.dart';
 import '../models/job_type_schema.dart';
 import '../services/api_client.dart';
 import '../services/field_rule_service.dart';
+import '../services/friendly_error.dart';
 import '../services/job_type_schema_service.dart';
 
 class JobInstanceEditViewModel extends ChangeNotifier {
@@ -453,7 +454,8 @@ class JobInstanceEditViewModel extends ChangeNotifier {
     return data;
   }
 
-  Future<String?> save(Future<void> Function(String instanceId, Map<String, dynamic> data) onSave) async {
+  Future<String?> save(
+      Future<void> Function(String instanceId, Map<String, dynamic> data, String jobTypeId) onSave) async {
     final error = validate();
     if (error != null) return error;
 
@@ -461,9 +463,9 @@ class JobInstanceEditViewModel extends ChangeNotifier {
     notifyListeners();
     String? result;
     try {
-      await onSave(instanceId, buildSubmissionData());
-    } catch (e) {
-      result = e.toString();
+      await onSave(instanceId, buildSubmissionData(), _schema?.jobTypeId ?? '');
+    } catch (e, st) {
+      result = logFriendlyError('JobInstanceEditVM', e, st);
     }
     _saving = false;
     notifyListeners();

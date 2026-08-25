@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import '../constants/server_urls.dart';
 import '../models/gosure_conversation.dart';
 import '../models/gosure_message.dart';
@@ -79,7 +80,7 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     final serverName = _cleanName(anyConversation.customerName);
     if (serverName != null) {
       _userDisplayNames[user] = serverName;
-      notifyListeners();
+      _notifyAfterBuild();
       return;
     }
     _pendingDisplayNameFetches.add(user);
@@ -99,7 +100,7 @@ class BusinessConversationsViewModel extends ChangeNotifier {
         _userDisplayNames[user] = name;
         AppLogger.i('BusinessConversationsVM',
             'Resolved display name for $user: $name');
-        notifyListeners();
+        _notifyAfterBuild();
       }
     } catch (e) {
       AppLogger.w('BusinessConversationsVM',
@@ -107,6 +108,12 @@ class BusinessConversationsViewModel extends ChangeNotifier {
     } finally {
       _pendingDisplayNameFetches.remove(user);
     }
+  }
+
+  void _notifyAfterBuild() {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!_disposed) notifyListeners();
+    });
   }
 
   // The SSO server historically stringified a missing last name as the literal word

@@ -13,7 +13,7 @@ class JobInstanceEditView extends StatelessWidget {
   final String jobTypeName;
   final String instanceId;
   final Map<String, dynamic> initialData;
-  final Future<void> Function(String instanceId, Map<String, dynamic> data) onSave;
+  final Future<void> Function(String instanceId, Map<String, dynamic> data, String jobTypeId) onSave;
 
   const JobInstanceEditView({
     super.key,
@@ -41,7 +41,7 @@ class JobInstanceEditView extends StatelessWidget {
 
 class _JobInstanceEditBody extends StatelessWidget {
   final String title;
-  final Future<void> Function(String instanceId, Map<String, dynamic> data) onSave;
+  final Future<void> Function(String instanceId, Map<String, dynamic> data, String jobTypeId) onSave;
 
   const _JobInstanceEditBody({required this.title, required this.onSave});
 

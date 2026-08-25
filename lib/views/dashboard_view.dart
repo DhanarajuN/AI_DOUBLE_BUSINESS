@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_constants.dart';
+import '../models/job_type_schema.dart';
 import '../models/plan.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
 import '../services/job_instance_update_service.dart';
+import '../services/job_type_schema_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../utils/date_format.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../widgets/business_icons.dart';
+import '../widgets/job_type_fields_form.dart' show getMaskedValue;
 import '../widgets/status_changer.dart';
 import 'home_shell_view.dart';
 import 'job_instance_edit_view.dart';
@@ -485,16 +488,44 @@ String _humanizeKey(String key) {
 
 final _trailingIdPattern = RegExp(r'\s*\([^()]*\)\s*$');
 
-String _stripTrailingId(String value) => value
+String stripTrailingId(String value) => value
     .split(',')
     .map((part) => part.replaceAll(_trailingIdPattern, '').trim())
     .join(', ');
 
-String _formatDetailValue(String raw) {
-  final value = _stripTrailingId(stripHtml(raw));
+String formatDetailValue(String raw) {
+  final value = stripTrailingId(stripHtml(raw));
+  if (RegExp(r'^\d+$').hasMatch(value)) return value;
   final dt = DateTime.tryParse(value);
   if (dt == null) return value;
-  return fmtDateDMY(dt);
+  final local = dt.toLocal();
+  final hasTime = local.hour != 0 || local.minute != 0;
+  return hasTime ? fmtDateTimeDMY(dt) : fmtDateDMY(dt);
+}
+
+Widget maskedDetailFields({
+  required Future<JobTypeSchema?> schemaFuture,
+  required List<MapEntry<String, dynamic>> fields,
+  required Widget Function(String key, String rawValue, String display) rowBuilder,
+}) {
+  return FutureBuilder<JobTypeSchema?>(
+    future: schemaFuture,
+    builder: (context, snapshot) {
+      final schema = snapshot.data;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: fields.map((e) {
+          final raw = e.value.toString();
+          final field = schema?.fieldNamed(e.key);
+          final display = field != null && field.mask.isNotEmpty
+              ? getMaskedValue(raw, field.mask).formattedValue
+              : formatDetailValue(raw);
+          return rowBuilder(e.key, raw, display);
+        }).toList(),
+      );
+    },
+  );
 }
 
 Widget orderRow(BuildContext context, Map<String, dynamic> order) {
@@ -508,7 +539,8 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
   return InkWell(
     borderRadius: BorderRadius.circular(10),
     onTap: () => showOrderDetail(context, order,
-        onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus),
+        onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus,
+        onSaved: () => context.read<DashboardViewModel>().refresh()),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -555,10 +587,12 @@ Widget orderRow(BuildContext context, Map<String, dynamic> order) {
 }
 
 void showOrderDetail(BuildContext context, Map<String, dynamic> order,
-    {required void Function(Map<String, dynamic> order, String status) onStatusChanged}) {
+    {required void Function(Map<String, dynamic> order, String status) onStatusChanged,
+    required VoidCallback onSaved}) {
   final title = orderTitle(order, orderData(order));
   final created = parseDate(order['createdAt']);
   final instanceId = (order['id'] ?? order['_id'])?.toString() ?? '';
+  final schemaFuture = fetchJobTypeSchema(context.read<ApiClient>(), AppConstants.jobTypeOrders);
 
   showModalBottomSheet(
     context: context,
@@ -617,10 +651,13 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order,
                                 jobTypeName: option.subJobTypeName!,
                                 instanceId: '',
                                 initialData: const {},
-                                onSave: (id, values) => updateJobInstanceData(
-                                    context.read<ApiClient>(), instanceId: id, data: values),
+                                onSave: (id, values, jobTypeId) => saveJobInstance(
+                                    context.read<ApiClient>(), instanceId: id, jobTypeId: jobTypeId, data: values),
                               ),
-                            )).then((completed) => completed ?? false),
+                            )).then((completed) {
+                              if (completed == true) onSaved();
+                              return completed ?? false;
+                            }),
                       ),
                     ],
                   ),
@@ -629,21 +666,27 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order,
                   if (fields.isEmpty)
                     _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
                   else
-                    ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), _formatDetailValue(e.value.toString()))),
+                    maskedDetailFields(
+                      schemaFuture: schemaFuture,
+                      fields: fields,
+                      rowBuilder: (key, raw, display) => _detailRow(Icons.info_outline, _humanizeKey(key), display),
+                    ),
                   _detailRow(Icons.tag, 'Order ID', _shortId(order, full: true)),
                   const SizedBox(height: 4),
                   closeEditRow(ctx, () {
                     Navigator.of(ctx).pop();
-                    Navigator.of(context).push(MaterialPageRoute(
+                    Navigator.of(context).push<bool>(MaterialPageRoute(
                       builder: (_) => JobInstanceEditView(
                         title: 'Edit Order',
                         jobTypeName: AppConstants.jobTypeOrders,
                         instanceId: instanceId,
                         initialData: data,
-                        onSave: (id, values) => updateJobInstanceData(
-                            context.read<ApiClient>(), instanceId: id, data: values),
+                        onSave: (id, values, jobTypeId) => saveJobInstance(
+                            context.read<ApiClient>(), instanceId: id, jobTypeId: jobTypeId, data: values),
                       ),
-                    ));
+                    )).then((saved) {
+                      if (saved == true) onSaved();
+                    });
                   }),
                 ],
               ),
@@ -666,7 +709,8 @@ Widget bookingRow(BuildContext context, Map<String, dynamic> booking) {
   return InkWell(
     borderRadius: BorderRadius.circular(10),
     onTap: () => showBookingDetail(context, booking,
-        onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus),
+        onStatusChanged: context.read<DashboardViewModel>().updateOrderStatus,
+        onSaved: () => context.read<DashboardViewModel>().refresh()),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -712,11 +756,13 @@ Widget bookingRow(BuildContext context, Map<String, dynamic> booking) {
 }
 
 void showBookingDetail(BuildContext context, Map<String, dynamic> booking,
-    {required void Function(Map<String, dynamic> booking, String status) onStatusChanged}) {
+    {required void Function(Map<String, dynamic> booking, String status) onStatusChanged,
+    required VoidCallback onSaved}) {
   final data = orderData(booking);
   final title = firstNonEmpty(data, const ['Customer Name', 'Name', 'Full Name']) ?? 'Booking ${_shortId(booking)}';
   final created = parseDate(booking['createdAt']);
   final instanceId = (booking['id'] ?? booking['_id'])?.toString() ?? '';
+  final schemaFuture = fetchJobTypeSchema(context.read<ApiClient>(), AppConstants.jobTypeBookings);
   final fields = data.entries
       .where((e) => e.key.toLowerCase() != 'status')
       .where((e) => e.value is String || e.value is num || e.value is bool)
@@ -773,10 +819,13 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking,
                                   jobTypeName: option.subJobTypeName!,
                                   instanceId: '',
                                   initialData: const {},
-                                  onSave: (id, values) => updateJobInstanceData(
-                                      context.read<ApiClient>(), instanceId: id, data: values),
+                                  onSave: (id, values, jobTypeId) => saveJobInstance(
+                                      context.read<ApiClient>(), instanceId: id, jobTypeId: jobTypeId, data: values),
                                 ),
-                              )).then((completed) => completed ?? false),
+                              )).then((completed) {
+                                if (completed == true) onSaved();
+                                return completed ?? false;
+                              }),
                         ),
                       ],
                     ),
@@ -788,21 +837,27 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking,
               if (fields.isEmpty)
                 _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
               else
-                ...fields.map((e) => _detailRow(Icons.info_outline, _humanizeKey(e.key), _formatDetailValue(e.value.toString()))),
+                maskedDetailFields(
+                  schemaFuture: schemaFuture,
+                  fields: fields,
+                  rowBuilder: (key, raw, display) => _detailRow(Icons.info_outline, _humanizeKey(key), display),
+                ),
               _detailRow(Icons.tag, 'Booking ID', _shortId(booking, full: true)),
               const SizedBox(height: 4),
               closeEditRow(ctx, () {
                 Navigator.of(ctx).pop();
-                Navigator.of(context).push(MaterialPageRoute(
+                Navigator.of(context).push<bool>(MaterialPageRoute(
                   builder: (_) => JobInstanceEditView(
                     title: 'Edit Booking',
                     jobTypeName: AppConstants.jobTypeBookings,
                     instanceId: instanceId,
                     initialData: data,
-                    onSave: (id, values) =>
-                        updateJobInstanceData(context.read<ApiClient>(), instanceId: id, data: values),
+                    onSave: (id, values, jobTypeId) => saveJobInstance(context.read<ApiClient>(),
+                        instanceId: id, jobTypeId: jobTypeId, data: values),
                   ),
-                ));
+                )).then((saved) {
+                  if (saved == true) onSaved();
+                });
               }),
             ],
           ),

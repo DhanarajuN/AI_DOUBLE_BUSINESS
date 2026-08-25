@@ -3,15 +3,18 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/server_urls.dart';
 import '../models/doc_source.dart';
+import '../models/job_type_schema.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
 import '../services/job_instance_update_service.dart';
+import '../services/job_type_schema_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../viewmodels/knowledge_view_model.dart';
 import '../widgets/business_icons.dart';
-import 'dashboard_view.dart' show closeEditRow, stripHtml;
+import '../widgets/job_type_fields_form.dart' show getMaskedValue;
+import 'dashboard_view.dart' show closeEditRow, maskedDetailFields, stripHtml;
 import 'job_instance_edit_view.dart';
 
 class KnowledgeView extends StatelessWidget {
@@ -163,10 +166,13 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
   @override
   bool get wantKeepAlive => true;
 
+  late final Future<JobTypeSchema?> _schemaFuture;
+
   @override
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    _schemaFuture = fetchJobTypeSchema(context.read<ApiClient>(), widget.categoryPlural);
   }
 
   @override
@@ -430,7 +436,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
     final title = _firstNonEmptyField(data, widget.titleKeys) ?? 'Untitled';
     final rawSubtitle = _firstNonEmptyField(data, widget.subtitleKeys);
     final subtitle = rawSubtitle == null ? null : stripHtml(rawSubtitle);
-    final price = _firstNonEmptyField(data, widget.priceKeys);
+    final priceEntry = _firstNonEmptyEntry(data, widget.priceKeys);
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -465,8 +471,17 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
               ),
             ),
             const SizedBox(width: 8),
-            if (price != null)
-              Text(price, style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent)),
+            if (priceEntry != null)
+              FutureBuilder<JobTypeSchema?>(
+                future: _schemaFuture,
+                builder: (context, snapshot) {
+                  final field = snapshot.data?.fieldNamed(priceEntry.key);
+                  final display = field != null && field.mask.isNotEmpty
+                      ? getMaskedValue(priceEntry.value, field.mask).formattedValue
+                      : priceEntry.value;
+                  return Text(display, style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent));
+                },
+              ),
             const SizedBox(width: 4),
             Icon(Icons.chevron_right, size: 18, color: AppColors.ink3),
           ],
@@ -484,6 +499,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
         .where((e) => e.value.toString().trim().isNotEmpty)
         .take(10)
         .toList();
+    final schemaFuture = _schemaFuture;
 
     showModalBottomSheet(
       context: context,
@@ -518,22 +534,28 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                 if (fields.isEmpty)
                   _detailRow(Icons.info_outline, 'Details', 'No additional details available.')
                 else
-                  ...fields.map((e) => _isPhoneKey(e.key)
-                      ? _phoneDetailRow(ctx, _humanizeKey(e.key), e.value.toString())
-                      : _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
+                  maskedDetailFields(
+                    schemaFuture: schemaFuture,
+                    fields: fields,
+                    rowBuilder: (key, raw, display) => _isPhoneKey(key)
+                        ? _phoneDetailRow(ctx, _humanizeKey(key), raw)
+                        : _detailRow(Icons.info_outline, _humanizeKey(key), display),
+                  ),
                 const SizedBox(height: 4),
                 closeEditRow(ctx, () {
                   Navigator.of(ctx).pop();
-                  Navigator.of(context).push(MaterialPageRoute(
+                  Navigator.of(context).push<bool>(MaterialPageRoute(
                     builder: (_) => JobInstanceEditView(
                       title: 'Edit ${widget.categoryLabel[0].toUpperCase()}${widget.categoryLabel.substring(1)}',
                       jobTypeName: widget.categoryPlural,
                       instanceId: instanceId,
                       initialData: data,
-                      onSave: (id, values) =>
-                          updateJobInstanceData(context.read<ApiClient>(), instanceId: id, data: values),
+                      onSave: (id, values, jobTypeId) => saveJobInstance(context.read<ApiClient>(),
+                          instanceId: id, jobTypeId: jobTypeId, data: values),
                     ),
-                  ));
+                  )).then((saved) {
+                    if (saved == true) context.read<DashboardViewModel>().refresh();
+                  });
                 }),
               ],
             ),
@@ -618,6 +640,14 @@ String? _firstNonEmptyField(Map<String, dynamic> data, List<String> keys) {
   for (final key in keys) {
     final value = data[key];
     if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return null;
+}
+
+MapEntry<String, String>? _firstNonEmptyEntry(Map<String, dynamic> data, List<String> keys) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) return MapEntry(key, value.trim());
   }
   return null;
 }

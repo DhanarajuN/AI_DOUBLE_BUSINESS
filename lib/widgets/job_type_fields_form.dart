@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -14,7 +15,7 @@ import '../services/api_client.dart';
 import '../services/app_logger.dart';
 import '../services/friendly_error.dart';
 import '../theme/app_theme.dart';
-import '../utils/date_format.dart';
+import '../utils/date_format.dart' show fmtDateDMY, fmtDateTimeDMY;
 import 'searchable_options_picker.dart';
 
 // "#" in the mask is a placeholder consumed by the next raw input character
@@ -33,6 +34,91 @@ String applyMask(String mask, String rawInput) {
     }
   }
   return buffer.toString();
+}
+
+String groupThousands(String digits) => digits.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+
+class MaskedValue {
+  final String rawInput;
+  final String formattedValue;
+  const MaskedValue(this.rawInput, this.formattedValue);
+}
+
+MaskedValue getMaskedValue(String fieldValue, String maskConfig) {
+  if (maskConfig.isEmpty) return MaskedValue(fieldValue, fieldValue);
+
+  var prefix = '';
+  var suffix = '';
+  var maskPattern = maskConfig;
+  var maskType = '';
+
+  if (maskConfig.trim().startsWith('{')) {
+    try {
+      final decoded = jsonDecode(maskConfig);
+      if (decoded is Map) {
+        prefix = decoded['prefix']?.toString() ?? '';
+        suffix = decoded['suffix']?.toString() ?? '';
+        maskPattern = decoded['maskPattern']?.toString() ?? '';
+        maskType = decoded['mask']?.toString() ?? '';
+      }
+    } catch (_) {
+      maskPattern = maskConfig;
+    }
+  }
+
+  var rawInput = prefix.isNotEmpty ? fieldValue.replaceFirst(prefix, '') : fieldValue;
+  rawInput = maskPattern.isNotEmpty && maskType.isEmpty
+      ? rawInput.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '')
+      : rawInput.replaceAll(RegExp(r'[^0-9.]'), '');
+
+  if (rawInput.isEmpty) return const MaskedValue('', '');
+
+  final formattedValue = maskPattern.isNotEmpty
+      ? '$prefix${applyMask(maskPattern, rawInput)}$suffix'
+      : '$prefix${groupThousands(rawInput)}$suffix';
+
+  return MaskedValue(rawInput, formattedValue);
+}
+
+String maskHint(String maskConfig) {
+  if (!maskConfig.trim().startsWith('{')) return maskConfig;
+  try {
+    final decoded = jsonDecode(maskConfig);
+    if (decoded is Map) return decoded['maskPattern']?.toString() ?? '';
+  } catch (_) {}
+  return '';
+}
+
+class MaskTextInputFormatter extends TextInputFormatter {
+  final String maskConfig;
+  const MaskTextInputFormatter(this.maskConfig);
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final result = getMaskedValue(newValue.text, maskConfig);
+    final formatted = result.formattedValue;
+    final caret = newValue.selection.end.clamp(0, newValue.text.length);
+    final rawBeforeCaret =
+        newValue.text.substring(0, caret).replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').length;
+
+    var offset = formatted.length;
+    var seen = 0;
+    for (var i = 0; i < formatted.length; i++) {
+      if (RegExp(r'[0-9a-zA-Z]').hasMatch(formatted[i])) {
+        seen++;
+        if (seen >= rawBeforeCaret) {
+          offset = i + 1;
+          while (offset < formatted.length && !RegExp(r'[0-9a-zA-Z]').hasMatch(formatted[offset])) {
+            offset++;
+          }
+          break;
+        }
+      }
+    }
+    if (rawBeforeCaret == 0) offset = 0;
+
+    return TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: offset));
+  }
 }
 
 bool _isValidPercent(String rule, String value) {
@@ -84,9 +170,10 @@ class JobTypeFieldsForm extends StatelessWidget {
     if (field.isBoolean) return _booleanField(field);
     if (field.isFile) return _attachmentField(context, field);
     if (field.isHtmlText) return _htmlField(field);
-    final raw = valueOf(field.name)?.toString() ?? '';
-    final asDate = DateTime.tryParse(raw);
-    if (field.isDatePicker || asDate != null) return _dateField(context, field, asDate);
+    if (field.isDatePicker) {
+      final raw = valueOf(field.name)?.toString() ?? '';
+      return _dateField(context, field, DateTime.tryParse(raw));
+    }
     if (field.hasPercentRule) return _PercentTextField(field: field, valueOf: valueOf, onTextChanged: onTextChanged);
     if (field.mask.isNotEmpty) return _MaskedTextField(field: field, valueOf: valueOf, onTextChanged: onTextChanged);
     return _dynamicTextField(field);
@@ -117,8 +204,8 @@ class JobTypeFieldsForm extends StatelessWidget {
 
   Widget _readOnlyField(JobTypeField field) {
     final raw = valueOf(field.name)?.toString() ?? '';
-    final asDate = DateTime.tryParse(raw);
-    final display = asDate != null ? fmtDateDMY(asDate) : raw;
+    final asDate = RegExp(r'^\d+$').hasMatch(raw) ? null : DateTime.tryParse(raw);
+    final display = asDate != null ? (field.isAutoDateTime ? fmtDateTimeDMY(asDate) : fmtDateDMY(asDate)) : raw;
     return Padding(
       key: ValueKey(field.name),
       padding: const EdgeInsets.only(bottom: 14),
@@ -382,6 +469,7 @@ class JobTypeFieldsForm extends StatelessWidget {
   Widget _dateField(BuildContext context, JobTypeField field, DateTime? current) {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
     final pickerBase = current ?? DateTime.now();
+    final isDateTime = field.isDateTimePicker;
     return Padding(
       key: ValueKey(field.name),
       padding: const EdgeInsets.only(bottom: 14),
@@ -394,13 +482,30 @@ class JobTypeFieldsForm extends StatelessWidget {
             child: InkWell(
               borderRadius: BorderRadius.circular(11),
               onTap: () async {
-                final picked = await showDatePicker(
+                final pickedDate = await showDatePicker(
                   context: context,
                   initialDate: pickerBase,
                   firstDate: DateTime(pickerBase.year - 5),
                   lastDate: DateTime(pickerBase.year + 5),
                 );
-                if (picked != null) onTextChanged(field.name, picked.toIso8601String());
+                if (pickedDate == null) return;
+                if (!isDateTime) {
+                  onTextChanged(field.name, pickedDate.toIso8601String());
+                  return;
+                }
+                if (!context.mounted) return;
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(pickerBase),
+                );
+                final combined = DateTime(
+                  pickedDate.year,
+                  pickedDate.month,
+                  pickedDate.day,
+                  pickedTime?.hour ?? pickerBase.hour,
+                  pickedTime?.minute ?? pickerBase.minute,
+                );
+                onTextChanged(field.name, combined.toIso8601String());
               },
               child: InputDecorator(
                 decoration: InputDecoration(
@@ -415,10 +520,10 @@ class JobTypeFieldsForm extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      current == null ? 'Select ${field.label}' : fmtDateDMY(current),
+                      current == null ? 'Select ${field.label}' : (isDateTime ? fmtDateTimeDMY(current) : fmtDateDMY(current)),
                       style: AppFonts.body(size: 14.5, color: current == null ? AppColors.ink3 : AppColors.ink),
                     ),
-                    Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.ink3),
+                    Icon(isDateTime ? Icons.access_time : Icons.calendar_today_outlined, size: 16, color: AppColors.ink3),
                   ],
                 ),
               ),
@@ -630,7 +735,9 @@ class _MaskedTextField extends StatefulWidget {
 }
 
 class _MaskedTextFieldState extends State<_MaskedTextField> {
-  late final _controller = TextEditingController(text: widget.valueOf(widget.field.name)?.toString() ?? '');
+  late final _controller = TextEditingController(
+    text: getMaskedValue(widget.valueOf(widget.field.name)?.toString() ?? '', widget.field.mask).formattedValue,
+  );
 
   @override
   void dispose() {
@@ -656,16 +763,11 @@ class _MaskedTextFieldState extends State<_MaskedTextField> {
             child: TextFormField(
               controller: _controller,
               style: AppFonts.body(size: 14.5, color: AppColors.ink),
-              onChanged: (v) {
-                final masked = applyMask(widget.field.mask, v);
-                _controller.value = TextEditingValue(
-                  text: masked,
-                  selection: TextSelection.collapsed(offset: masked.length),
-                );
-                widget.onTextChanged(widget.field.name, masked);
-              },
+              inputFormatters: [MaskTextInputFormatter(widget.field.mask)],
+              onChanged: (v) =>
+                  widget.onTextChanged(widget.field.name, getMaskedValue(v, widget.field.mask).rawInput),
               decoration: InputDecoration(
-                hintText: widget.field.mask,
+                hintText: maskHint(widget.field.mask),
                 hintStyle: AppFonts.body(size: 14, color: AppColors.ink3),
                 filled: true,
                 fillColor: AppColors.card,

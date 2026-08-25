@@ -36,6 +36,12 @@ String timeAgoShort(DateTime? t) {
   return '${d}d ago';
 }
 
+String conversationDisplayTitle(GosureConversation convo) {
+  if (convo.title?.trim().isNotEmpty == true) return convo.title!.trim();
+  if (convo.customerName?.trim().isNotEmpty == true) return convo.customerName!.trim();
+  return convo.conversationId;
+}
+
 // Shared by the per-user history screen (see _UserPastChatsView) and, previously,
 // the flat conversation list — one row per conversation, opening its detail view.
 Widget conversationTile(
@@ -45,8 +51,7 @@ Widget conversationTile(
   int unreadCount,
   VoidCallback onTap,
 ) {
-  final title =
-      convo.title?.isNotEmpty == true ? convo.title! : convo.conversationId;
+  final title = conversationDisplayTitle(convo);
   return InkWell(
     borderRadius: BorderRadius.circular(14),
     onTap: onTap,

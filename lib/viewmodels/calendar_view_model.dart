@@ -36,6 +36,8 @@ class CalendarViewModel extends ChangeNotifier {
       .map((j) => Map<String, dynamic>.from(j))
       .toList();
 
+  Future<void> refresh() => _loadSubJobs();
+
   Future<void> _loadSubJobs() async {
     final businessId = await _sessionStorage.readBusinessId();
     if (businessId == null || businessId.isEmpty) return;

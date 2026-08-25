@@ -125,7 +125,7 @@ class _LoginBodyState extends State<_LoginBody> {
                   const SizedBox(height: 22),
                   _feature(Icons.shield_outlined, 'Answers from your own documents, with the source named'),
                   const SizedBox(height: 11),
-                  _feature(Icons.mic_none_outlined, 'Ask by voice or chat, in English, हिंदी or मराठी'),
+                  _feature(Icons.mic_none_outlined, 'Ask by voice or chat, in English'),
                   const SizedBox(height: 11),
                   _feature(Icons.vpn_key_outlined, 'Your data stays on this device'),
                   const SizedBox(height: 40),

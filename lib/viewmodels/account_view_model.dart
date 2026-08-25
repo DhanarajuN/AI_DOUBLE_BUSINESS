@@ -25,12 +25,36 @@ class AccountViewModel extends ChangeNotifier {
   Map<String, dynamic>? _businessData;
   Map<String, dynamic>? get businessData => _businessData;
 
+  String? _businessId;
+  String? get businessId => _businessId;
+
   int _bookingCount = 0;
 
   Future<void> _loadBusinessData() async {
     _businessData = await _sessionStorage.readBusinessData();
+    _businessId = await _sessionStorage.readBusinessId();
     notifyListeners();
     await _loadBookingCount();
+  }
+
+  Future<void> refreshBusinessData() async {
+    final id = _businessId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final result = await _apiClient.get('${ServerUrls.jobInstances}/$id');
+      if (result is! Map<String, dynamic>) return;
+      final jobs = result['jobs'] as List?;
+      if (jobs == null || jobs.isEmpty) return;
+      final job = jobs.first;
+      if (job is! Map<String, dynamic>) return;
+      final data = job['data'];
+      if (data is! Map) return;
+      _businessData = Map<String, dynamic>.from(data);
+      await _sessionStorage.saveBusinessData(_businessData!);
+      notifyListeners();
+    } catch (e) {
+      AppLogger.w('AccountVM', 'Could not refresh business data: $e');
+    }
   }
 
   Future<void> _loadBookingCount() async {

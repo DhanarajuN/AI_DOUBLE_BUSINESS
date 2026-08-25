@@ -5,10 +5,12 @@ import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../services/api_client.dart';
+import '../services/job_instance_update_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/account_view_model.dart';
 import 'dashboard_view.dart' show fmtN, fmtTok, initialsOf;
+import 'job_instance_edit_view.dart';
 import 'plans_view.dart';
 
 const _kSwatches = ['#1D4ED8', '#0F3D6E', '#0D9488', '#4F46E5', '#334155', '#0E8A5F'];
@@ -52,6 +54,20 @@ class _AccountBodyState extends State<_AccountBody> {
       await vm.logout();
       if (context.mounted) Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
     }
+  }
+
+  Future<void> _editBusiness(BuildContext context, AccountViewModel vm) async {
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => JobInstanceEditView(
+        title: 'Edit Business',
+        jobTypeName: 'Business',
+        instanceId: vm.businessId ?? '',
+        initialData: vm.businessData ?? const {},
+        onSave: (id, values, jobTypeId) =>
+            saveJobInstance(context.read<ApiClient>(), instanceId: id, jobTypeId: jobTypeId, data: values),
+      ),
+    ));
+    if (saved == true) await vm.refreshBusinessData();
   }
 
   @override
@@ -125,7 +141,11 @@ class _AccountBodyState extends State<_AccountBody> {
                 child: Column(
                   children: [
                     if (bizName != null || bizCategory != null) ...[
-                      _row(Icons.storefront_outlined, bizName ?? 'Business', bizCategory ?? '—'),
+                      _row(Icons.storefront_outlined, bizName ?? 'Business', bizCategory ?? '—',
+                          trailing: TextButton(
+                            onPressed: () => _editBusiness(context, vm),
+                            child: Text('Edit', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent)),
+                          )),
                       Divider(height: 20, color: AppColors.line),
                     ],
                     _row(Icons.local_offer_outlined, '${plan.name} plan', plan.price != null ? '${c.symbol}${fmtN(plan.price![vm.currency]!)} / month' : 'Custom pricing',
