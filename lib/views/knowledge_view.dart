@@ -5,12 +5,14 @@ import '../constants/server_urls.dart';
 import '../models/doc_source.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
+import '../services/job_instance_update_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import '../viewmodels/knowledge_view_model.dart';
 import '../widgets/business_icons.dart';
-import 'dashboard_view.dart' show stripHtml;
+import 'dashboard_view.dart' show closeEditRow, stripHtml;
+import 'job_instance_edit_view.dart';
 
 class KnowledgeView extends StatelessWidget {
   const KnowledgeView({super.key});
@@ -475,6 +477,7 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
 
   void _showCategoryDetail(BuildContext context, Map<String, dynamic> item, String title) {
     final data = _itemData(item);
+    final instanceId = (item['id'] ?? item['_id'])?.toString() ?? '';
     final fields = data.entries
         .where((e) => !widget.titleKeys.any((k) => k.toLowerCase() == e.key.toLowerCase()))
         .where((e) => e.value is String || e.value is num || e.value is bool)
@@ -519,18 +522,19 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
                       ? _phoneDetailRow(ctx, _humanizeKey(e.key), e.value.toString())
                       : _detailRow(Icons.info_outline, _humanizeKey(e.key), stripHtml(e.value.toString()))),
                 const SizedBox(height: 4),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.line2),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                closeEditRow(ctx, () {
+                  Navigator.of(ctx).pop();
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => JobInstanceEditView(
+                      title: 'Edit ${widget.categoryLabel[0].toUpperCase()}${widget.categoryLabel.substring(1)}',
+                      jobTypeName: widget.categoryPlural,
+                      instanceId: instanceId,
+                      initialData: data,
+                      onSave: (id, values) =>
+                          updateJobInstanceData(context.read<ApiClient>(), instanceId: id, data: values),
                     ),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: Text('Close', style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                  ),
-                ),
+                  ));
+                }),
               ],
             ),
           ),

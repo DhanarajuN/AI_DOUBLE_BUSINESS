@@ -71,8 +71,9 @@ class BusinessConversationsRepository extends ChangeNotifier {
     try {
       final history = await BusinessChatService.fetchConversationHistory(
           conversation.conversationId, businessId);
-      if (myGeneration != _openGeneration)
+      if (myGeneration != _openGeneration) {
         return; // superseded by a newer open() while this was in flight
+      }
       activeMessages = history;
       await _markSeen(conversation.conversationId);
     } catch (e, st) {
@@ -85,8 +86,9 @@ class BusinessConversationsRepository extends ChangeNotifier {
       }
     }
 
-    if (myGeneration != _openGeneration)
+    if (myGeneration != _openGeneration) {
       return; // superseded before we got to subscribing
+    }
 
     _subscribeToConversationEvents(
         conversation.conversationId, businessId, myGeneration);
@@ -145,8 +147,9 @@ class BusinessConversationsRepository extends ChangeNotifier {
   }
 
   void _handleEvent(Map<String, dynamic> event, int generation) {
-    if (generation != _openGeneration)
+    if (generation != _openGeneration) {
       return; // event from a conversation we've since left
+    }
     final type = event['type'] as String?;
     if (type == 'message.created') {
       final raw = event['message'] as Map<String, dynamic>?;

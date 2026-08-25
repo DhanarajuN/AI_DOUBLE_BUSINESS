@@ -56,6 +56,28 @@ class CalendarViewModel extends ChangeNotifier {
     }
   }
 
+  void updateOrderStatus(Map<String, dynamic> booking, String status) {
+    final id = (booking['id'] ?? booking['_id'])?.toString();
+    final match = _subJobs.whereType<Map>().firstWhere(
+          (j) => (j['id'] ?? j['_id'])?.toString() == id,
+          orElse: () => booking,
+        );
+
+    match[AppConstants.fieldCurrentJobStatus] = status;
+
+    var data = match['data'];
+    if (data is! Map) {
+      data = <String, dynamic>{};
+      match['data'] = data;
+    }
+    final key = data.keys.cast<String>().firstWhere(
+          (k) => k.toLowerCase() == 'status',
+          orElse: () => 'Status',
+        );
+    data[key] = status;
+    notifyListeners();
+  }
+
   void shift(int n) {
     _month = DateTime(_month.year, _month.month + n, 1);
     notifyListeners();

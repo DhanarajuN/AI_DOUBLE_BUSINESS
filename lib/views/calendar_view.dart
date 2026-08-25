@@ -357,7 +357,8 @@ class _CalendarBody extends StatelessWidget {
               final status = orderStatusOf(b);
               final dt = _bookingDateTime(b);
               return InkWell(
-                onTap: () => showBookingDetail(context, b),
+                onTap: () => showBookingDetail(context, b,
+                    onStatusChanged: context.read<CalendarViewModel>().updateOrderStatus),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 7),
                   child: Row(

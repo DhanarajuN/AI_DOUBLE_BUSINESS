@@ -42,12 +42,18 @@ class DashboardViewModel extends ChangeNotifier {
   int get ordersCount => orders.length;
 
   void updateOrderStatus(Map<String, dynamic> order, String status) {
-    order[AppConstants.fieldCurrentJobStatus] = status;
+    final id = (order['id'] ?? order['_id'])?.toString();
+    final match = _subJobs.whereType<Map>().firstWhere(
+          (j) => (j['id'] ?? j['_id'])?.toString() == id,
+          orElse: () => order,
+        );
 
-    var data = order['data'];
+    match[AppConstants.fieldCurrentJobStatus] = status;
+
+    var data = match['data'];
     if (data is! Map) {
       data = <String, dynamic>{};
-      order['data'] = data;
+      match['data'] = data;
     }
     final key = data.keys.cast<String>().firstWhere(
           (k) => k.toLowerCase() == 'status',

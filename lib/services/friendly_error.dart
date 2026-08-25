@@ -1,7 +1,22 @@
+import 'api_client.dart';
 import 'app_logger.dart';
 
 
+String _cleanApiMessage(String raw) {
+  var msg = raw.trim();
+  msg = msg.replaceFirst(RegExp(r'^\d{3}\s+[A-Z_]+\s*'), '');
+  if (msg.length >= 2 && msg.startsWith('"') && msg.endsWith('"')) {
+    msg = msg.substring(1, msg.length - 1);
+  }
+  msg = msg.trim();
+  return msg.isEmpty ? raw.trim() : msg;
+}
+
 String friendlyError(Object error) {
+  if (error is ApiException && error.message.trim().isNotEmpty) {
+    return _cleanApiMessage(error.message);
+  }
+
   final raw = error.toString();
   final lower = raw.toLowerCase();
 
