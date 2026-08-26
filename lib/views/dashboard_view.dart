@@ -405,7 +405,11 @@ String _shortId(Map<String, dynamic> order, {bool full = false}) {
   return id.substring(id.length - 8);
 }
 
-DateTime? parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
+// .toLocal() matters wherever a caller reads .year/.month/.day off the
+// result (calendar day-bucketing, "this week"/"this month" grouping) — a
+// UTC timestamp near local midnight would otherwise land on the wrong day.
+// .difference()-based comparisons are timezone-invariant either way.
+DateTime? parseDate(dynamic value) => value is String ? DateTime.tryParse(value)?.toLocal() : null;
 
 String stripHtml(String input) {
   if (!input.contains('<')) return input;
@@ -503,6 +507,17 @@ String formatDetailValue(String raw) {
   return hasTime ? fmtDateTimeDMY(dt) : fmtDateDMY(dt);
 }
 
+bool isTimeOnlyKey(String key) {
+  final k = key.trim().toLowerCase();
+  return (k == 'time' || k.endsWith('time')) && !k.contains('date');
+}
+
+String formatTimeOnlyValue(String raw) {
+  final value = stripTrailingId(stripHtml(raw));
+  final dt = DateTime.tryParse(value);
+  return dt == null ? value : fmtTimeOnly(dt);
+}
+
 Widget maskedDetailFields({
   required Future<JobTypeSchema?> schemaFuture,
   required List<MapEntry<String, dynamic>> fields,
@@ -520,7 +535,9 @@ Widget maskedDetailFields({
           final field = schema?.fieldNamed(e.key);
           final display = field != null && field.mask.isNotEmpty
               ? getMaskedValue(raw, field.mask).formattedValue
-              : formatDetailValue(raw);
+              : isTimeOnlyKey(e.key)
+                  ? formatTimeOnlyValue(raw)
+                  : formatDetailValue(raw);
           return rowBuilder(e.key, raw, display);
         }).toList(),
       );

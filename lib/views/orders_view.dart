@@ -6,7 +6,7 @@ import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import 'dashboard_view.dart'
-    show fmtN, fmtDateTime, orderData, orderTitle, orderStatusOf, orderStatusColor, showOrderDetail;
+    show fmtN, fmtDateTime, orderData, orderTitle, orderStatusOf, orderStatusColor, parseDate, showOrderDetail;
 
 enum _Period { week, month, total, custom }
 
@@ -52,7 +52,7 @@ class _OrdersBodyState extends State<_OrdersBody> {
   }
 
   bool _matchesPeriod(Map<String, dynamic> order) {
-    final created = order['createdAt'] is String ? DateTime.tryParse(order['createdAt'] as String) : null;
+    final created = parseDate(order['createdAt']);
     if (created == null) return _period == _Period.total;
     final now = DateTime.now();
     switch (_period) {
@@ -369,7 +369,7 @@ class _OrdersBodyState extends State<_OrdersBody> {
     final data = orderData(order);
     final title = orderTitle(order, data);
     final status = orderStatusOf(order);
-    final created = order['createdAt'] is String ? DateTime.tryParse(order['createdAt'] as String) : null;
+    final created = parseDate(order['createdAt']);
     final color = orderStatusColor(status);
 
     return InkWell(

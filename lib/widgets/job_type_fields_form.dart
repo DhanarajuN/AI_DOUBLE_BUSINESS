@@ -172,7 +172,11 @@ class JobTypeFieldsForm extends StatelessWidget {
     if (field.isHtmlText) return _htmlField(field);
     if (field.isDatePicker) {
       final raw = valueOf(field.name)?.toString() ?? '';
-      return _dateField(context, field, DateTime.tryParse(raw));
+      // A UTC/offset value must be converted before it's used as the date
+      // and time pickers' initialDate/initialTime — those read wall-clock
+      // fields directly, and Flutter's date picker also rejects a
+      // UTC-flagged initialDate outright.
+      return _dateField(context, field, DateTime.tryParse(raw)?.toLocal());
     }
     if (field.hasPercentRule) return _PercentTextField(field: field, valueOf: valueOf, onTextChanged: onTextChanged);
     if (field.mask.isNotEmpty) return _MaskedTextField(field: field, valueOf: valueOf, onTextChanged: onTextChanged);

@@ -14,19 +14,22 @@ const _dows = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 DateTime? _bookingDateTime(Map<String, dynamic> booking) {
   final data = orderData(booking);
-  final raw = firstNonEmpty(data, const [
-    'Booking Date',
-    'Appointment Date',
-    'Scheduled Date',
-    'Booking Time',
-    'Appointment Time',
-    'Date',
-    'Time',
-  ]);
-  if (raw != null) {
-    final parsed = DateTime.tryParse(raw);
-    if (parsed != null) return parsed;
+  final dateRaw = firstNonEmpty(data, const ['Booking Date', 'Appointment Date', 'Scheduled Date', 'Date']);
+  final timeRaw = firstNonEmpty(data, const ['Booking Time', 'Appointment Time', 'Time']);
+
+  // A UTC/offset timestamp (e.g. trailing "Z") parses with those fields
+  // intact — reading .year/.month/.day/.hour off it directly (for the
+  // calendar's day cell and time-of-day label) would use the wrong
+  // wall-clock day near midnight. .toLocal() converts before any of that
+  // happens; .difference() elsewhere is unaffected either way.
+  final datePart = dateRaw == null ? null : DateTime.tryParse(dateRaw)?.toLocal();
+  final timePart = timeRaw == null ? null : DateTime.tryParse(timeRaw)?.toLocal();
+
+  if (datePart != null && timePart != null) {
+    return DateTime(datePart.year, datePart.month, datePart.day, timePart.hour, timePart.minute, timePart.second);
   }
+  if (datePart != null) return datePart;
+  if (timePart != null) return timePart;
   return parseDate(booking['createdAt']);
 }
 
