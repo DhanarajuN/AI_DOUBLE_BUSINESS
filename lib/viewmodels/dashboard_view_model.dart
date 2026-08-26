@@ -7,6 +7,7 @@ import '../models/doc_source.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
 import '../services/app_logger.dart';
+import '../services/job_type_instance_service.dart';
 import '../services/session_storage.dart';
 
 class DashboardViewModel extends ChangeNotifier {
@@ -22,28 +23,18 @@ class DashboardViewModel extends ChangeNotifier {
   Map<String, dynamic>? _businessData;
   Map<String, dynamic>? get businessData => _businessData;
 
-  List<dynamic> _subJobs = [];
-  List<dynamic> get subJobs => _subJobs;
+  List<Map<String, dynamic>> _bookings = [];
+  List<Map<String, dynamic>> _orders = [];
 
-  List<Map<String, dynamic>> _subJobsOfType(String jobTypeName) => _subJobs
-      .whereType<Map>()
-      .where((j) {
-        final type = j[AppConstants.fieldJobTypeName];
-        return type is String && type.toLowerCase() == jobTypeName.toLowerCase();
-      })
-      .map((j) => Map<String, dynamic>.from(j))
-      .toList();
+  List<Map<String, dynamic>> get bookings => _bookings;
+  int get bookingsCount => _bookings.length;
 
-  List<Map<String, dynamic>> get bookings => _subJobsOfType(AppConstants.jobTypeBookings);
-  int get bookingsCount => bookings.length;
-
-  List<Map<String, dynamic>> get orders => _subJobsOfType(AppConstants.jobTypeOrders);
-
-  int get ordersCount => orders.length;
+  List<Map<String, dynamic>> get orders => _orders;
+  int get ordersCount => _orders.length;
 
   void updateOrderStatus(Map<String, dynamic> order, String status) {
     final id = (order['id'] ?? order['_id'])?.toString();
-    final match = _subJobs.whereType<Map>().firstWhere(
+    final match = [..._bookings, ..._orders].firstWhere(
           (j) => (j['id'] ?? j['_id'])?.toString() == id,
           orElse: () => order,
         );
@@ -90,12 +81,12 @@ class DashboardViewModel extends ChangeNotifier {
   Future<void> _loadBusinessData() async {
     _businessData = await _sessionStorage.readBusinessData();
     notifyListeners();
-    await _loadSubJobs();
+    await _loadBookingsAndOrders();
     await _loadCatalog();
   }
 
   Future<void> refresh() async {
-    await _loadSubJobs();
+    await _loadBookingsAndOrders();
     await _loadCatalog();
   }
 
@@ -178,28 +169,20 @@ class DashboardViewModel extends ChangeNotifier {
     }
   }
 
-  // Sub jobs of the resolved Business record — GET /api/v1/job-instances/:businessId
-  // returns {jobs: [{...business fields..., CreatedSubJobs: [{jobTypeName, data, ...}]}]}.
-  Future<void> _loadSubJobs() async {
-    final businessId = await _sessionStorage.readBusinessId();
-    if (businessId == null || businessId.isEmpty) return;
-    try {
-      final result =
-          await _apiClient.get('${ServerUrls.jobInstances}/$businessId');
-      if (result is! Map<String, dynamic>) return;
-      final jobs = result['jobs'] as List?;
-      if (jobs == null || jobs.isEmpty) return;
-      final job = jobs.first;
-      if (job is! Map<String, dynamic>) return;
-      final subJobs = job[AppConstants.fieldCreatedSubJobs];
-      if (subJobs is List) {
-        _subJobs = subJobs;
-        AppLogger.i('DashboardVM', 'Loaded ${subJobs.length} sub jobs');
-        notifyListeners();
-      }
-    } catch (e) {
-      AppLogger.w('DashboardVM', 'Could not load sub jobs: $e');
-    }
+  Future<void> _loadBookingsAndOrders() async {
+    final businessEmail = (_businessData?[AppConstants.fieldBusinessEmail] ?? _businessData?['Work Email']) as String?;
+    final filter = await resolveBookingsOrdersFilter(_sessionStorage, businessEmail: businessEmail);
+    if (filter == null) return;
+    final results = await Future.wait([
+      fetchJobTypeInstances(_apiClient,
+          typeName: AppConstants.jobTypeBookings, filterFieldName: filter.fieldName, filterValue: filter.value),
+      fetchJobTypeInstances(_apiClient,
+          typeName: AppConstants.jobTypeOrders, filterFieldName: filter.fieldName, filterValue: filter.value),
+    ]);
+    _bookings = results[0];
+    _orders = results[1];
+    AppLogger.i('DashboardVM', 'Loaded ${_bookings.length} booking(s) and ${_orders.length} order(s)');
+    notifyListeners();
   }
 
   BusinessProfile? get business => _workspace.business;

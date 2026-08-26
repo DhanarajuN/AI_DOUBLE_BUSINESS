@@ -7,6 +7,7 @@ import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
 import '../services/app_logger.dart';
+import '../services/job_type_instance_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 
@@ -58,21 +59,13 @@ class AccountViewModel extends ChangeNotifier {
   }
 
   Future<void> _loadBookingCount() async {
-    final businessId = await _sessionStorage.readBusinessId();
-    if (businessId == null || businessId.isEmpty) return;
     try {
-      final result = await _apiClient.get('${ServerUrls.jobInstances}/$businessId');
-      if (result is! Map<String, dynamic>) return;
-      final jobs = result['jobs'] as List?;
-      if (jobs == null || jobs.isEmpty) return;
-      final job = jobs.first;
-      if (job is! Map<String, dynamic>) return;
-      final subJobs = job[AppConstants.fieldCreatedSubJobs];
-      if (subJobs is! List) return;
-      _bookingCount = subJobs.whereType<Map>().where((j) {
-        final type = j[AppConstants.fieldJobTypeName];
-        return type is String && type.toLowerCase() == AppConstants.jobTypeBookings.toLowerCase();
-      }).length;
+      final businessEmail = (_businessData?[AppConstants.fieldBusinessEmail] ?? _businessData?['Work Email']) as String?;
+      final filter = await resolveBookingsOrdersFilter(_sessionStorage, businessEmail: businessEmail);
+      if (filter == null) return;
+      final bookings = await fetchJobTypeInstances(_apiClient,
+          typeName: AppConstants.jobTypeBookings, filterFieldName: filter.fieldName, filterValue: filter.value);
+      _bookingCount = bookings.length;
       notifyListeners();
     } catch (e) {
       AppLogger.w('AccountVM', 'Could not load booking count: $e');
