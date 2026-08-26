@@ -99,15 +99,7 @@ class _LoginBodyState extends State<_LoginBody> {
                     children: [
                       const AppLogoMark(size: 26),
                       const SizedBox(width: 10),
-                      RichText(
-                        text: TextSpan(
-                          style: AppFonts.display(size: 18, color: Colors.white),
-                          children: [
-                            const TextSpan(text: 'AI '),
-                            TextSpan(text: 'Double', style: AppFonts.display(size: 18, weight: FontWeight.w800, color: AppColors.accent2)),
-                          ],
-                        ),
-                      ),
+                      Text('AI Double', style: AppFonts.display(size: 18, weight: FontWeight.w800, color: Colors.white)),
                     ],
                   ),
                   const SizedBox(height: 56),

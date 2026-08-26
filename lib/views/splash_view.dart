@@ -64,18 +64,7 @@ class _SplashViewState extends State<SplashView> {
           children: [
             const AppLogoMark(size: 60),
             const SizedBox(height: 20),
-            RichText(
-              text: TextSpan(
-                style: AppFonts.display(size: 26, color: Colors.white),
-                children: [
-                  const TextSpan(text: 'AI '),
-                  TextSpan(
-                    text: 'Double',
-                    style: AppFonts.display(size: 26, weight: FontWeight.w800, color: AppColors.accent2),
-                  ),
-                ],
-              ),
-            ),
+            Text('AI Double', style: AppFonts.display(size: 26, weight: FontWeight.w800, color: Colors.white)),
             const SizedBox(height: 6),
             Text('BUSINESS', style: AppFonts.mono(size: 11, color: AppColors.chromeTx, letterSpacing: 3)),
             const SizedBox(height: 28),

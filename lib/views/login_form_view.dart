@@ -135,19 +135,7 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
                   const Center(child: AppLogoMark(size: 76)),
                   const SizedBox(height: 20),
                   Center(
-                    child: RichText(
-                      text: TextSpan(
-                        style: AppFonts.display(size: 30, weight: FontWeight.w800, color: AppColors.ink),
-                        children: [
-                          const TextSpan(text: 'AI '),
-                          TextSpan(
-                            text: 'Double',
-                            style: AppFonts.display(size: 30, weight: FontWeight.w700, color: AppColors.warm)
-                                .copyWith(fontStyle: FontStyle.italic),
-                          ),
-                        ],
-                      ),
-                    ),
+                    child: Text('AI Double', style: AppFonts.display(size: 30, weight: FontWeight.w800, color: AppColors.chrome)),
                   ),
                   const SizedBox(height: 6),
                   Center(

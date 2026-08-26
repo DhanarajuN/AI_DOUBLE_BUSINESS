@@ -106,15 +106,7 @@ class _SignupBodyState extends State<_SignupBody> {
                   children: [
                     const AppLogoMark(size: 22),
                     const SizedBox(width: 9),
-                    RichText(
-                      text: TextSpan(
-                        style: AppFonts.display(size: 16, color: AppColors.ink),
-                        children: [
-                          const TextSpan(text: 'AI '),
-                          TextSpan(text: 'Double', style: AppFonts.display(size: 16, weight: FontWeight.w800, color: AppColors.accent)),
-                        ],
-                      ),
-                    ),
+                    Text('AI Double', style: AppFonts.display(size: 16, weight: FontWeight.w800, color: AppColors.chrome)),
                   ],
                 ),
                 const SizedBox(height: 16),
