@@ -134,3 +134,90 @@ ThemeData buildAppTheme() {
     ),
   );
 }
+
+ThemeData pickerAppTheme(BuildContext context) {
+  final base = Theme.of(context);
+  Color onDay(Set<WidgetState> states) {
+    if (states.contains(WidgetState.selected)) return Colors.white;
+    if (states.contains(WidgetState.disabled)) return AppColors.ink3.withOpacity(0.4);
+    return AppColors.ink;
+  }
+
+  Color? dayBg(Set<WidgetState> states) => states.contains(WidgetState.selected) ? AppColors.accent : null;
+
+  final confirmButtonStyle = TextButton.styleFrom(
+    foregroundColor: AppColors.accent,
+    textStyle: AppFonts.body(size: 13.5, weight: FontWeight.w600),
+  );
+  final cancelButtonStyle = TextButton.styleFrom(
+    foregroundColor: AppColors.ink2,
+    textStyle: AppFonts.body(size: 13.5, weight: FontWeight.w600),
+  );
+
+  return base.copyWith(
+    colorScheme: base.colorScheme.copyWith(
+      primary: AppColors.accent,
+      onPrimary: Colors.white,
+      primaryContainer: AppColors.accentSoft,
+      onPrimaryContainer: AppColors.accent,
+      secondary: AppColors.accent,
+      surface: AppColors.card,
+      onSurface: AppColors.ink,
+      onSurfaceVariant: AppColors.ink3,
+      outline: AppColors.line2,
+      surfaceContainerHigh: AppColors.paper2,
+    ),
+    textTheme: base.textTheme.apply(fontFamily: AppFonts.body().fontFamily),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: AppColors.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      headerBackgroundColor: AppColors.accent,
+      headerForegroundColor: Colors.white,
+      headerHeadlineStyle: AppFonts.display(size: 22, color: Colors.white),
+      headerHelpStyle: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: Colors.white.withOpacity(0.85)),
+      weekdayStyle: AppFonts.body(size: 12, weight: FontWeight.w700, color: AppColors.ink3),
+      dayStyle: AppFonts.body(size: 13.5, color: AppColors.ink),
+      dayForegroundColor: WidgetStateProperty.resolveWith(onDay),
+      dayBackgroundColor: WidgetStateProperty.resolveWith(dayBg),
+      dayOverlayColor: WidgetStateProperty.all(AppColors.accent.withOpacity(0.08)),
+      todayForegroundColor: WidgetStateProperty.all(AppColors.accent),
+      todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
+      todayBorder: BorderSide(color: AppColors.accent, width: 1.2),
+      rangePickerBackgroundColor: AppColors.card,
+      rangePickerHeaderBackgroundColor: AppColors.accent,
+      rangePickerHeaderForegroundColor: Colors.white,
+      rangePickerHeaderHeadlineStyle: AppFonts.display(size: 20, color: Colors.white),
+      rangePickerHeaderHelpStyle: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: Colors.white.withOpacity(0.85)),
+      rangeSelectionBackgroundColor: AppColors.accentSoft,
+      rangeSelectionOverlayColor: WidgetStateProperty.all(AppColors.accent.withOpacity(0.1)),
+      dividerColor: AppColors.line,
+      cancelButtonStyle: cancelButtonStyle,
+      confirmButtonStyle: confirmButtonStyle,
+    ),
+    timePickerTheme: TimePickerThemeData(
+      backgroundColor: AppColors.card,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      helpTextStyle: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink3),
+      dialBackgroundColor: AppColors.paper2,
+      dialHandColor: AppColors.accent,
+      dialTextColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? Colors.white : AppColors.ink),
+      hourMinuteColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.accent : AppColors.paper2),
+      hourMinuteTextColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? Colors.white : AppColors.ink),
+      hourMinuteTextStyle: AppFonts.display(size: 32),
+      dayPeriodColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.accent : AppColors.paper2),
+      dayPeriodTextColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? Colors.white : AppColors.ink2),
+      dayPeriodBorderSide: BorderSide(color: AppColors.line2),
+      entryModeIconColor: AppColors.accent,
+      cancelButtonStyle: cancelButtonStyle,
+      confirmButtonStyle: confirmButtonStyle,
+    ),
+  );
+}

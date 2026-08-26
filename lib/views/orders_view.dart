@@ -6,7 +6,7 @@ import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/dashboard_view_model.dart';
 import 'dashboard_view.dart'
-    show fmtN, fmtDateTime, orderData, orderTitle, orderStatusOf, orderStatusColor, parseDate, showOrderDetail;
+    show fmtN, fmtDateTime, orderData, orderTitle, orderStatusOf, orderStatusColor, recordReferenceDate, showOrderDetail;
 
 enum _Period { week, month, total, custom }
 
@@ -52,7 +52,7 @@ class _OrdersBodyState extends State<_OrdersBody> {
   }
 
   bool _matchesPeriod(Map<String, dynamic> order) {
-    final created = parseDate(order['createdAt']);
+    final created = recordReferenceDate(order);
     if (created == null) return _period == _Period.total;
     final now = DateTime.now();
     switch (_period) {
@@ -80,74 +80,13 @@ class _OrdersBodyState extends State<_OrdersBody> {
       lastDate: now,
       initialDateRange:
           _customRange ?? DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
-      builder: (ctx, child) => Theme(data: _rangePickerTheme(ctx), child: child!),
+      builder: (ctx, child) => Theme(data: pickerAppTheme(ctx), child: child!),
     );
     if (picked == null) return;
     setState(() {
       _customRange = picked;
       _period = _Period.custom;
     });
-  }
-
-  ThemeData _rangePickerTheme(BuildContext context) {
-    final base = Theme.of(context);
-    Color onDay(Set<WidgetState> states) {
-      if (states.contains(WidgetState.selected)) return Colors.white;
-      if (states.contains(WidgetState.disabled)) return AppColors.ink3.withOpacity(0.4);
-      return AppColors.ink;
-    }
-
-    Color? dayBg(Set<WidgetState> states) => states.contains(WidgetState.selected) ? AppColors.accent : null;
-
-    return base.copyWith(
-      colorScheme: base.colorScheme.copyWith(
-        primary: AppColors.accent,
-        onPrimary: Colors.white,
-        primaryContainer: AppColors.accentSoft,
-        onPrimaryContainer: AppColors.accent,
-        secondary: AppColors.accent,
-        surface: AppColors.card,
-        onSurface: AppColors.ink,
-        onSurfaceVariant: AppColors.ink3,
-        outline: AppColors.line2,
-        surfaceContainerHigh: AppColors.paper2,
-      ),
-      textTheme: base.textTheme.apply(fontFamily: AppFonts.body().fontFamily),
-      datePickerTheme: DatePickerThemeData(
-        backgroundColor: AppColors.card,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        headerBackgroundColor: AppColors.accent,
-        headerForegroundColor: Colors.white,
-        headerHeadlineStyle: AppFonts.display(size: 22, color: Colors.white),
-        headerHelpStyle: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: Colors.white.withOpacity(0.85)),
-        weekdayStyle: AppFonts.body(size: 12, weight: FontWeight.w700, color: AppColors.ink3),
-        dayStyle: AppFonts.body(size: 13.5, color: AppColors.ink),
-        dayForegroundColor: WidgetStateProperty.resolveWith(onDay),
-        dayBackgroundColor: WidgetStateProperty.resolveWith(dayBg),
-        dayOverlayColor: WidgetStateProperty.all(AppColors.accent.withOpacity(0.08)),
-        todayForegroundColor: WidgetStateProperty.all(AppColors.accent),
-        todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
-        todayBorder: BorderSide(color: AppColors.accent, width: 1.2),
-        rangePickerBackgroundColor: AppColors.card,
-        rangePickerHeaderBackgroundColor: AppColors.accent,
-        rangePickerHeaderForegroundColor: Colors.white,
-        rangePickerHeaderHeadlineStyle: AppFonts.display(size: 20, color: Colors.white),
-        rangePickerHeaderHelpStyle: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: Colors.white.withOpacity(0.85)),
-        rangeSelectionBackgroundColor: AppColors.accentSoft,
-        rangeSelectionOverlayColor: WidgetStateProperty.all(AppColors.accent.withOpacity(0.1)),
-        dividerColor: AppColors.line,
-        cancelButtonStyle: TextButton.styleFrom(
-          foregroundColor: AppColors.ink2,
-          textStyle: AppFonts.body(size: 13.5, weight: FontWeight.w600),
-        ),
-        confirmButtonStyle: TextButton.styleFrom(
-          foregroundColor: AppColors.accent,
-          textStyle: AppFonts.body(size: 13.5, weight: FontWeight.w600),
-        ),
-      ),
-    );
   }
 
   String _rangeLabel(DateTimeRange r) {
@@ -369,7 +308,7 @@ class _OrdersBodyState extends State<_OrdersBody> {
     final data = orderData(order);
     final title = orderTitle(order, data);
     final status = orderStatusOf(order);
-    final created = parseDate(order['createdAt']);
+    final created = recordReferenceDate(order);
     final color = orderStatusColor(status);
 
     return InkWell(

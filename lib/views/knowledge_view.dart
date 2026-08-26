@@ -14,7 +14,7 @@ import '../viewmodels/dashboard_view_model.dart';
 import '../viewmodels/knowledge_view_model.dart';
 import '../widgets/business_icons.dart';
 import '../widgets/job_type_fields_form.dart' show getMaskedValue;
-import 'dashboard_view.dart' show closeEditRow, maskedDetailFields, stripHtml;
+import 'dashboard_view.dart' show closeEditRow, maskedDetailFields, prioritizeDateTimeFields, stripHtml;
 import 'job_instance_edit_view.dart';
 
 class KnowledgeView extends StatelessWidget {
@@ -493,11 +493,10 @@ class _CategoryTabState extends State<_CategoryTab> with AutomaticKeepAliveClien
   void _showCategoryDetail(BuildContext context, Map<String, dynamic> item, String title) {
     final data = _itemData(item);
     final instanceId = (item['id'] ?? item['_id'])?.toString() ?? '';
-    final fields = data.entries
+    final fields = prioritizeDateTimeFields(data.entries
         .where((e) => !widget.titleKeys.any((k) => k.toLowerCase() == e.key.toLowerCase()))
         .where((e) => e.value is String || e.value is num || e.value is bool)
-        .where((e) => e.value.toString().trim().isNotEmpty)
-        .take(10)
+        .where((e) => e.value.toString().trim().isNotEmpty))
         .toList();
     final schemaFuture = _schemaFuture;
 

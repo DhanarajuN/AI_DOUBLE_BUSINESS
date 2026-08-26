@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
-import 'package:http/http.dart' as http;
 import '../constants/server_urls.dart';
 import '../models/user.dart';
 import '../routes/app_routes.dart';
@@ -245,18 +243,14 @@ class AuthRepository extends ChangeNotifier {
     // restart.
     unawaited(PushNotificationService().registerForCurrentUser());
 
-    // Every login from this app should carry whatever role is configured for
-    // it, regardless of what the account's SSO-created default role was.
-    // Fire-and-forget, NOT awaited: this must never block the login that
-    // already succeeded, even if the promotion calls hang outright (not just
-    // fail fast) — hence the explicit timeout as a hard ceiling.
-    unawaited(
-      _promoteConfiguredRole(userId)
-          .timeout(const Duration(seconds: 10))
-          .catchError((e) {
-        AppLogger.w('AuthRepository', 'Could not promote user role: $e');
-      }),
-    );
+    // Role promotion on login disabled — see _promoteConfiguredRole below.
+    // unawaited(
+    //   _promoteConfiguredRole(userId)
+    //       .timeout(const Duration(seconds: 10))
+    //       .catchError((e) {
+    //     AppLogger.w('AuthRepository', 'Could not promote user role: $e');
+    //   }),
+    // );
   }
 
   /// Looks up which role this app's logins should get from a Configurations
@@ -276,6 +270,7 @@ class AuthRepository extends ChangeNotifier {
   // unrelated to the login that just genuinely succeeded) must never
   // trigger _apiClient's onUnauthorized and force the user straight back
   // out, moments after they signed in.
+  /*
   Future<void> _promoteConfiguredRole(String userId) async {
     final roleName =
         await _resolveConfiguredRoleName(ServerUrls.ssoCallbackScheme);
@@ -309,11 +304,16 @@ class AuthRepository extends ChangeNotifier {
       ..['roleId'] = roleId
       ..['accountRole'] = accountRole
       ..['roleName'] = '$roleName($roleId)';
+    // Echoes back the full fetched user record with only roleId/accountRole/
+    // roleName changed — this PUT overwrites the other mapped fields
+    // unconditionally, so a partial payload here would blank them out.
     await _apiClient.put('${ServerUrls.usersUpdate}/$userId',
         body: updated, silent: true);
     AppLogger.i('AuthRepository', 'Promoted user $userId to $roleName');
   }
+  */
 
+  /*
   /// Looks up a Configurations instance by its Name field and returns
   /// string_value, via core-mcp's direct-query endpoint rather than
   /// ongo-core's public REST list endpoint — the latter applies workflow/ACL
@@ -341,6 +341,7 @@ class AuthRepository extends ChangeNotifier {
     final value = body['value'];
     return (value is String && value.trim().isNotEmpty) ? value.trim() : null;
   }
+  */
 
   Future<void> continueWithEmail(String email) async {
     final trimmed = email.trim();

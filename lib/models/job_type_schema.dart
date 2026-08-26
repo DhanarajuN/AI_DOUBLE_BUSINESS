@@ -134,6 +134,8 @@ class JobTypeField {
 
   bool get isDateTimePicker => type == 'Date_Time';
 
+  bool get isTimePicker => type == 'Time';
+
   bool get isHtmlText => type == 'Large_Text' && isHtmlViewOnly;
 
   bool get isEmail => type == 'Email';

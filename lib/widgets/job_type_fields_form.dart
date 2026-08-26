@@ -15,7 +15,7 @@ import '../services/api_client.dart';
 import '../services/app_logger.dart';
 import '../services/friendly_error.dart';
 import '../theme/app_theme.dart';
-import '../utils/date_format.dart' show fmtDateDMY, fmtDateTimeDMY;
+import '../utils/date_format.dart' show fmtDateDMY, fmtDateTimeDMY, fmtTimeOnly;
 import 'searchable_options_picker.dart';
 
 // "#" in the mask is a placeholder consumed by the next raw input character
@@ -170,7 +170,7 @@ class JobTypeFieldsForm extends StatelessWidget {
     if (field.isBoolean) return _booleanField(field);
     if (field.isFile) return _attachmentField(context, field);
     if (field.isHtmlText) return _htmlField(field);
-    if (field.isDatePicker) {
+    if (field.isDatePicker || field.isTimePicker) {
       final raw = valueOf(field.name)?.toString() ?? '';
       // A UTC/offset value must be converted before it's used as the date
       // and time pickers' initialDate/initialTime — those read wall-clock
@@ -474,6 +474,7 @@ class JobTypeFieldsForm extends StatelessWidget {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.line2));
     final pickerBase = current ?? DateTime.now();
     final isDateTime = field.isDateTimePicker;
+    final isTimeOnly = field.isTimePicker;
     return Padding(
       key: ValueKey(field.name),
       padding: const EdgeInsets.only(bottom: 14),
@@ -486,11 +487,26 @@ class JobTypeFieldsForm extends StatelessWidget {
             child: InkWell(
               borderRadius: BorderRadius.circular(11),
               onTap: () async {
+                if (isTimeOnly) {
+                  final pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(pickerBase),
+                    builder: (ctx, child) => Theme(data: pickerAppTheme(ctx), child: child!),
+                  );
+                  if (pickedTime == null) return;
+                  final combined = DateTime(
+                    pickerBase.year, pickerBase.month, pickerBase.day,
+                    pickedTime.hour, pickedTime.minute,
+                  );
+                  onTextChanged(field.name, combined.toUtc().toIso8601String());
+                  return;
+                }
                 final pickedDate = await showDatePicker(
                   context: context,
                   initialDate: pickerBase,
                   firstDate: DateTime(pickerBase.year - 5),
                   lastDate: DateTime(pickerBase.year + 5),
+                  builder: (ctx, child) => Theme(data: pickerAppTheme(ctx), child: child!),
                 );
                 if (pickedDate == null) return;
                 if (!isDateTime) {
@@ -501,6 +517,7 @@ class JobTypeFieldsForm extends StatelessWidget {
                 final pickedTime = await showTimePicker(
                   context: context,
                   initialTime: TimeOfDay.fromDateTime(pickerBase),
+                  builder: (ctx, child) => Theme(data: pickerAppTheme(ctx), child: child!),
                 );
                 final combined = DateTime(
                   pickedDate.year,
@@ -524,10 +541,12 @@ class JobTypeFieldsForm extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      current == null ? 'Select ${field.label}' : (isDateTime ? fmtDateTimeDMY(current) : fmtDateDMY(current)),
+                      current == null
+                          ? 'Select ${field.label}'
+                          : (isTimeOnly ? fmtTimeOnly(current) : (isDateTime ? fmtDateTimeDMY(current) : fmtDateDMY(current))),
                       style: AppFonts.body(size: 14.5, color: current == null ? AppColors.ink3 : AppColors.ink),
                     ),
-                    Icon(isDateTime ? Icons.access_time : Icons.calendar_today_outlined, size: 16, color: AppColors.ink3),
+                    Icon(isDateTime || isTimeOnly ? Icons.access_time : Icons.calendar_today_outlined, size: 16, color: AppColors.ink3),
                   ],
                 ),
               ),

@@ -89,20 +89,20 @@ class _DashboardBody extends StatelessWidget {
     final bks = vm.bookings;
     final now = DateTime.now();
     final bksWeek = bks.where((b) {
-      final created = parseDate(b['createdAt']);
+      final created = recordReferenceDate(b);
       return created != null && now.difference(created).inDays < 7;
     }).length;
     final bksMonth = bks.where((b) {
-      final created = parseDate(b['createdAt']);
+      final created = recordReferenceDate(b);
       return created != null && created.year == now.year && created.month == now.month;
     }).length;
     final orders = vm.orders;
     final ordersWeek = orders.where((o) {
-      final created = parseDate(o['createdAt']);
+      final created = recordReferenceDate(o);
       return created != null && now.difference(created).inDays < 7;
     }).length;
     final ordersMonth = orders.where((o) {
-      final created = parseDate(o['createdAt']);
+      final created = recordReferenceDate(o);
       return created != null && created.year == now.year && created.month == now.month;
     }).length;
 
@@ -394,6 +394,15 @@ String? firstNonEmpty(Map<String, dynamic>? data, List<String> keys) {
 Map<String, dynamic> orderData(Map<String, dynamic> order) =>
     order['data'] is Map ? Map<String, dynamic>.from(order['data'] as Map) : <String, dynamic>{};
 
+DateTime? recordReferenceDate(Map<String, dynamic> record) {
+  final dateRaw = firstNonEmpty(orderData(record), const ['Booking Date', 'Appointment Date', 'Scheduled Date', 'Order Date', 'Date']);
+  if (dateRaw != null) {
+    final parsed = DateTime.tryParse(dateRaw)?.toLocal();
+    if (parsed != null) return parsed;
+  }
+  return parseDate(record['dateCreated']) ?? parseDate(record['createdAt']);
+}
+
 String orderTitle(Map<String, dynamic> order, Map<String, dynamic> data) =>
     firstNonEmpty(data, const ['Customer Name', 'Name', 'Title', 'Product Name', 'Product', 'Item', 'Order Name']) ??
     'Order ${_shortId(order)}';
@@ -496,6 +505,16 @@ String stripTrailingId(String value) => value
     .split(',')
     .map((part) => part.replaceAll(_trailingIdPattern, '').trim())
     .join(', ');
+
+List<MapEntry<String, dynamic>> prioritizeDateTimeFields(Iterable<MapEntry<String, dynamic>> fields) {
+  final priority = <MapEntry<String, dynamic>>[];
+  final rest = <MapEntry<String, dynamic>>[];
+  for (final e in fields) {
+    final k = e.key.trim().toLowerCase();
+    (k.endsWith('date') || k.endsWith('time') ? priority : rest).add(e);
+  }
+  return [...priority, ...rest];
+}
 
 String formatDetailValue(String raw) {
   final value = stripTrailingId(stripHtml(raw));
@@ -619,11 +638,10 @@ void showOrderDetail(BuildContext context, Map<String, dynamic> order,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setSheetState) {
         final data = orderData(order);
-        final fields = data.entries
+        final fields = prioritizeDateTimeFields(data.entries
             .where((e) => e.key.toLowerCase() != 'status')
             .where((e) => e.value is String || e.value is num || e.value is bool)
-            .where((e) => e.value.toString().trim().isNotEmpty)
-            .take(8)
+            .where((e) => e.value.toString().trim().isNotEmpty))
             .toList();
 
         return SafeArea(
@@ -780,11 +798,10 @@ void showBookingDetail(BuildContext context, Map<String, dynamic> booking,
   final created = parseDate(booking['createdAt']);
   final instanceId = (booking['id'] ?? booking['_id'])?.toString() ?? '';
   final schemaFuture = fetchJobTypeSchema(context.read<ApiClient>(), AppConstants.jobTypeBookings);
-  final fields = data.entries
+  final fields = prioritizeDateTimeFields(data.entries
       .where((e) => e.key.toLowerCase() != 'status')
       .where((e) => e.value is String || e.value is num || e.value is bool)
-      .where((e) => e.value.toString().trim().isNotEmpty)
-      .take(8)
+      .where((e) => e.value.toString().trim().isNotEmpty))
       .toList();
 
   showModalBottomSheet(
