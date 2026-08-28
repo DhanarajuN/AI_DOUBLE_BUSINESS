@@ -1,4 +1,4 @@
-enum GosureMessageSender { customer, agent, business }
+enum GosureMessageSender { customer, agent, business, broker }
 
 class GosureMessage {
   final String messageId;
@@ -31,12 +31,13 @@ class GosureMessage {
   // businessId is tagged on every message in the conversation (customer's,
   // agent's, and the business's own alike) — it says which business the
   // conversation is about, not who sent this particular message, so it can't
-  // be the signal here. The business-injection route (POST
+  // be the signal here. The direct-message route (POST
   // /:conversationId/messages in conversations.js) is the one and only place
-  // that ever sets `sender: 'Business'` literally — customer messages and
-  // agent replies never do, regardless of businessId.
+  // that ever sets `sender: 'Business'` or `sender: 'Broker'` literally —
+  // customer messages and agent replies never do, regardless of businessId.
   GosureMessageSender get senderKind {
     if (sender == 'Business') return GosureMessageSender.business;
+    if (sender == 'Broker') return GosureMessageSender.broker;
     return isCreatedByUser
         ? GosureMessageSender.customer
         : GosureMessageSender.agent;

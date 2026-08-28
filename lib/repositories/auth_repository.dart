@@ -55,6 +55,10 @@ class AuthRepository extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   List<String>? get brokerHideItems => _brokerHideItems;
+  // Same check fetchModuleConstants already makes inline (see below) —
+  // exposed here too since conversation views need to know which side of a
+  // shared conversation "You" refers to (see ConversationDetailView._bubble).
+  bool get isBroker => (_currentUser?.roleName ?? '').toLowerCase().contains('broker');
   List<String>? get businessHideItems => _businessHideItems;
   List<String>? get hideItems => _brokerHideItems ?? _businessHideItems;
 

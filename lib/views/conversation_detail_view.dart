@@ -3,6 +3,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:provider/provider.dart';
 import '../models/gosure_conversation.dart';
 import '../models/gosure_message.dart';
+import '../repositories/auth_repository.dart';
 import '../repositories/business_conversations_repository.dart';
 import '../services/friendly_error.dart';
 import '../theme/app_theme.dart';
@@ -243,7 +244,8 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
                           controller: _scrollCtrl,
                           padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
                           itemCount: vm.messages.length,
-                          itemBuilder: (context, i) => _bubble(vm.messages[i]),
+                          itemBuilder: (context, i) => _bubble(
+                              vm.messages[i], context.read<AuthRepository>().isBroker),
                         ),
             ),
             if (!agentOn)
@@ -318,33 +320,46 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
   // The SSO server historically stringified a missing last name as the literal word
   // "null" into the display name (e.g. "Hitesh null"), and that bad string is already
   // saved on old messages — strip it here too, not just at the login source.
-  String _cleanSenderName(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return 'Customer';
+  String _cleanSenderName(String? raw, {String fallback = 'Customer'}) {
+    if (raw == null || raw.trim().isEmpty) return fallback;
     final cleaned =
         raw.replaceAll(RegExp(r'\s+null\b', caseSensitive: false), '').trim();
     return cleaned.isEmpty ? raw.trim() : cleaned;
   }
 
   // Agent replies are the business's own AI, so they sit on the same side as
-  // the business's direct messages — only the customer is on the other side.
-  Widget _bubble(GosureMessage m) {
+  // whichever of business/broker is currently signed in — only the customer
+  // is ever on the other side. This same screen is shared by both sign-in
+  // modes (see AI_DOUBLE_BUSINESS's dual-mode login), so "isMine"/"You" is
+  // relative to the CURRENT viewer, not hardcoded to business: a broker
+  // viewing this exact conversation sees their own messages on the right and
+  // the business's on the left, the mirror image of what the business sees.
+  Widget _bubble(GosureMessage m, bool viewerIsBroker) {
     final kind = m.senderKind;
-    final isMine = kind == GosureMessageSender.business ||
-        kind == GosureMessageSender.agent;
+    final isMine = kind == GosureMessageSender.agent ||
+        (viewerIsBroker
+            ? kind == GosureMessageSender.broker
+            : kind == GosureMessageSender.business);
     final label = switch (kind) {
       GosureMessageSender.customer => _cleanSenderName(m.senderName),
       GosureMessageSender.agent => 'AI agent',
-      GosureMessageSender.business => 'You',
+      GosureMessageSender.business =>
+        viewerIsBroker ? _cleanSenderName(m.senderName, fallback: 'Business') : 'You',
+      GosureMessageSender.broker =>
+        viewerIsBroker ? 'You' : _cleanSenderName(m.senderName, fallback: 'Broker'),
     };
     final bubbleColor = switch (kind) {
       GosureMessageSender.customer => AppColors.card,
       GosureMessageSender.agent => AppColors.accentSoft,
       GosureMessageSender.business => AppColors.accent,
+      // Broker gets its own distinct color, never confused with business's
+      // accent color — same warm tone used for AppColors.warm elsewhere.
+      GosureMessageSender.broker => AppColors.amber,
     };
-    final textColor =
-        kind == GosureMessageSender.business ? Colors.white : AppColors.ink;
-    final labelColor =
-        kind == GosureMessageSender.business ? Colors.white70 : AppColors.ink3;
+    final onColorBubble =
+        kind == GosureMessageSender.business || kind == GosureMessageSender.broker;
+    final textColor = onColorBubble ? Colors.white : AppColors.ink;
+    final labelColor = onColorBubble ? Colors.white70 : AppColors.ink3;
 
     final avatar = _avatarFor(kind, label);
     final bubble = Container(
@@ -402,6 +417,11 @@ class _ConversationDetailBodyState extends State<_ConversationDetailBody> {
       GosureMessageSender.business => (
           Icons.person,
           AppColors.accent,
+          Colors.white
+        ),
+      GosureMessageSender.broker => (
+          Icons.support_agent,
+          AppColors.amber,
           Colors.white
         ),
     };
