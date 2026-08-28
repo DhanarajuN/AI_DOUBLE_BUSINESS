@@ -148,17 +148,21 @@ class SessionStorage {
     await prefs.setInt('$_readCountPrefix$conversationId', count);
   }
 
-  // Business/conversation state is scoped to whichever user resolved or entered it — clear it
-  // on logout so a different user signing in on the same device doesn't inherit the previous
-  // user's business ID or see its conversations already marked as read.
+  // businessId/businessData are scoped to whichever user resolved or entered
+  // it — clear those on logout so a different user signing in on the same
+  // device doesn't inherit the previous user's business ID. Read counts are
+  // deliberately NOT wiped here anymore: they're keyed purely by
+  // conversationId, which is a globally unique id, so a different
+  // user/business signing in on this device can never collide with another
+  // user's entries (their own conversation list is scoped to their own
+  // businessId/brokerId and will simply never contain those conversationIds).
+  // Wiping them on every logout was actively wrong — it reset a returning
+  // user's own already-seen messages back to "unread" on every single
+  // re-login, showing inflated/incorrect badge counts for conversations they
+  // had genuinely already read.
   Future<void> clearBusinessData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_businessIdKey);
     await prefs.remove(_businessDataKey);
-    for (final key in prefs.getKeys()) {
-      if (key.startsWith(_readCountPrefix)) {
-        await prefs.remove(key);
-      }
-    }
   }
 }
