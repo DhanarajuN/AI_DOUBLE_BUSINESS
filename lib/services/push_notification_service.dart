@@ -167,6 +167,15 @@ class PushNotificationService {
     final businessId = await _sessionStorage.readBusinessId();
     final accessToken = await _sessionStorage.readAccessToken();
     if (accessToken == null || accessToken.isEmpty) return;
+    // This same service/class is shared by both sign-in modes (broker/business
+    // dual-mode login) — 'app' was hardcoded to 'business' regardless of which
+    // role is actually signed in. The businessId field below already holds the
+    // right id either way (see business_lookup_service.dart), so notification
+    // delivery itself was never broken by this, but the stored PushToken
+    // record mislabeled every broker's device as a business device — wrong
+    // for any future admin/debug view keyed on 'app', so labeled correctly now.
+    final roleName = (await _sessionStorage.readRoleName())?.trim().toLowerCase() ?? '';
+    final isBroker = roleName.contains('broker');
     try {
       final res = await http.post(
         Uri.parse('${ServerUrls.librechatURL}${ServerUrls.gosureConvos}/push/register'),
@@ -174,7 +183,7 @@ class PushNotificationService {
         body: jsonEncode({
           'token': token,
           'platform': Platform.isIOS ? 'ios' : 'android',
-          'app': 'business',
+          'app': isBroker ? 'broker' : 'business',
           if (businessId != null && businessId.isNotEmpty) 'businessId': businessId,
         }),
       );

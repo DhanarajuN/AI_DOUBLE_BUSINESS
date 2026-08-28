@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import '../constants/server_urls.dart';
@@ -243,9 +244,24 @@ class BusinessConversationsViewModel extends ChangeNotifier {
   /// createdByUsername isn't a `data.*` field, so it can't be server-side
   /// filtered like Work Email could be — fetches the (currently small) full
   /// list and matches client-side instead.
+  // This is the fallback path — only reached when SessionStorage.readBusinessId()
+  // came back empty (login-time resolution in business_lookup_service.dart
+  // hadn't run yet, or its result was never persisted) — so it needs the
+  // exact same role branch that resolution already makes, or a broker whose
+  // login-time resolution happened to miss would be stuck on "retry" forever:
+  // this searched the Business directory unconditionally, which a broker's
+  // email is never registered under, so it could never find a match and
+  // needsBusinessId would never clear no matter how many times retryResolve()
+  // ran. Confirmed bug, not just a hypothetical — same anti-pattern already
+  // fixed once at login time, missed here in this second, separate copy.
   Future<String?> _resolveMyBusinessId(String email) async {
     final wanted = email.trim().toLowerCase();
     if (wanted.isEmpty) return null;
+
+    final roleName = (await _sessionStorage.readRoleName())?.trim().toLowerCase() ?? '';
+    if (roleName.contains('broker')) {
+      return _resolveMyBrokerId(wanted);
+    }
 
     final result = await _apiClient.get(
       ServerUrls.businessInstances,
@@ -273,6 +289,28 @@ class BusinessConversationsViewModel extends ChangeNotifier {
       }
     }
     return workEmailMatch;
+  }
+
+  // Mirrors business_lookup_service.dart's _resolveViaBrokersApi: Broker
+  // records use "Email" (server-side filterable), not "Work Email"/
+  // createdByUsername the way Business does.
+  Future<String?> _resolveMyBrokerId(String wanted) async {
+    final result = await _apiClient.get(
+      ServerUrls.jobTypeInstances('Broker'),
+      query: {
+        'pageNumber': '1',
+        'pageSize': '10',
+        'filters': jsonEncode([
+          {'fieldName': 'Email', 'condition': 'contains', 'value': wanted},
+        ]),
+      },
+    );
+    if (result is! Map<String, dynamic>) return null;
+    final jobs = result['jobs'] as List?;
+    if (jobs == null || jobs.isEmpty) return null;
+    final broker = jobs.first;
+    if (broker is! Map<String, dynamic>) return null;
+    return broker['id'] as String?;
   }
 
   Future<void> refresh() async {
