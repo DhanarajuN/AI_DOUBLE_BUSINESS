@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../theme/app_theme.dart';
 import 'account_view.dart';
@@ -19,48 +20,71 @@ class HomeShellView extends StatefulWidget {
 class _HomeShellViewState extends State<HomeShellView> {
   int _index = 0;
 
-  static const _tabs = [
-    (icon: Icons.home_outlined, iconOn: Icons.home, label: 'Home'),
+  static const _allTabs = [
+    (
+      icon: Icons.home_outlined,
+      iconOn: Icons.home,
+      label: 'Home',
+      page: DashboardView(),
+    ),
     (
       icon: Icons.calendar_month_outlined,
       iconOn: Icons.calendar_month,
-      label: 'Calendar'
+      label: 'Calendar',
+      page: CalendarView(),
     ),
     (
       icon: Icons.shopping_bag_outlined,
       iconOn: Icons.shopping_bag,
-      label: 'Orders'
+      label: 'Orders',
+      page: OrdersView(),
     ),
     (
       icon: Icons.chat_bubble_outline,
       iconOn: Icons.chat_bubble,
-      label: 'Chats'
+      label: 'Chats',
+      page: BusinessConversationsView(),
     ),
     (
       icon: Icons.description_outlined,
       iconOn: Icons.description,
-      label: 'Knowledge'
+      label: 'Knowledge',
+      page: KnowledgeView(),
     ),
-    (icon: Icons.person_outline, iconOn: Icons.person, label: 'Account'),
+    (
+      icon: Icons.person_outline,
+      iconOn: Icons.person,
+      label: 'Account',
+      page: AccountView(),
+    ),
   ];
 
-  final _pages = const [
-    DashboardView(),
-    CalendarView(),
-    OrdersView(),
-    BusinessConversationsView(),
-    KnowledgeView(),
-    AccountView(),
-  ];
+  // AIDOUBLE_BROKER_HIDE_ITEMS / AIDOUBLE_BUSINESS_HIDE_ITEMS (from
+  // /api/v1/module-constants, fetched at login, role-scoped in
+  // AuthRepository.hideItems) name tabs — by their label above — that the
+  // signed-in role should not see at all, e.g. "Knowledge" or "Orders".
+  List<({IconData icon, IconData iconOn, String label, Widget page})> _visibleTabs(BuildContext context) {
+    final hide = (context.watch<AuthRepository>().hideItems ?? const <String>[])
+        .map((s) => s.trim().toLowerCase())
+        .toSet();
+    if (hide.isEmpty) return _allTabs;
+    return _allTabs.where((t) => !hide.contains(t.label.toLowerCase())).toList();
+  }
 
-  void goToTab(int i) => setState(() => _index = i);
+  void goToTab(String label) {
+    final tabs = _visibleTabs(context);
+    final i = tabs.indexWhere((t) => t.label == label);
+    if (i != -1) setState(() => _index = i);
+  }
 
   @override
   Widget build(BuildContext context) {
     context.watch<WorkspaceRepository>();
+    final tabs = _visibleTabs(context);
+    final index = _index.clamp(0, tabs.length - 1);
     return Scaffold(
       backgroundColor: AppColors.paper2,
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(index: index, children: tabs.map((t) => t.page).toList()),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppColors.card,
@@ -75,9 +99,9 @@ class _HomeShellViewState extends State<HomeShellView> {
           child: SizedBox(
             height: 64,
             child: Row(
-              children: List.generate(_tabs.length, (i) {
-                final t = _tabs[i];
-                final on = i == _index;
+              children: List.generate(tabs.length, (i) {
+                final t = tabs[i];
+                final on = i == index;
                 return Expanded(
                   child: InkWell(
                     onTap: () => setState(() => _index = i),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_constants.dart';
 import '../models/job_type_schema.dart';
-import '../models/plan.dart';
+import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../services/api_client.dart';
 import '../services/job_instance_update_service.dart';
@@ -75,6 +75,13 @@ class _DashboardBody extends StatelessWidget {
     final biz = vm.business;
     if (biz == null) return const SizedBox();
 
+    final hide = (context.watch<AuthRepository>().hideItems ?? const <String>[])
+        .map((s) => s.trim().toLowerCase())
+        .toSet();
+    final showCalendar = !hide.contains('calendar');
+    final showOrders = !hide.contains('orders');
+    final showKnowledge = !hide.contains('knowledge');
+
     final hour = DateTime.now().hour;
     final greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     final data = vm.businessData;
@@ -85,7 +92,6 @@ class _DashboardBody extends StatelessWidget {
             .join(' ');
     final heroCategory = firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
     final heroHours = firstNonEmpty(data, const ['Availabilty Times', 'Availability Times'])?.split('(').first.trim();
-    final plan = planById(biz.planId);
     final bks = vm.bookings;
     final now = DateTime.now();
     final bksWeek = bks.where((b) {
@@ -115,99 +121,105 @@ class _DashboardBody extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
             children: [
-              _hero(heroName, heroOwner, greet, heroCategory, heroHours, plan),
+              _hero(heroName, heroOwner, greet, heroCategory, heroHours),
               const SizedBox(height: 14),
-              _kpiGrid(context, bks.length, vm.ordersCount),
-              _sectionHeader('Bookings', 'Calendar →', () => _goTab(context, 1)),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        _stat(fmtN(bks.length), 'total'),
-                        _stat(fmtN(bksWeek), 'this week'),
-                        _stat(fmtN(bksMonth), 'this month'),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (bks.isEmpty)
-                      _empty('No bookings yet.')
-                    else
-                      ...bks.take(5).map((b) => bookingRow(context, b)),
-                  ],
-                ),
-              ),
-              _sectionHeader('Orders', 'View all →', () => _goTab(context, 2)),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        _stat(fmtN(orders.length), 'total'),
-                        _stat(fmtN(ordersWeek), 'this week'),
-                        _stat(fmtN(ordersMonth), 'this month'),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (orders.isEmpty)
-                      _empty('No orders yet.')
-                    else
-                      ...orders.take(5).map((o) => orderRow(context, o)),
-                  ],
-                ),
-              ),
-              _sectionHeader('Files uploaded', 'Manage →', () => _goTab(context, 4)),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (vm.docs.isEmpty)
-                      _empty('No files yet. Add your policies, price lists or FAQs so the agent answers from them.')
-                    else
-                      ...vm.docs.take(4).map((d) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(9)),
-                                  alignment: Alignment.center,
-                                  child: Icon(businessIcon(d.isFile ? 'file' : 'doc'), size: 17, color: AppColors.accent),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
-                                      Text(d.meta, style: AppFonts.body(size: 11, color: AppColors.ink3)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )),
-                    const SizedBox(height: 4),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: AppColors.paper2,
-                          side: BorderSide(color: AppColors.line2),
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-                        ),
-                        onPressed: () => _goTab(context, 4),
-                        icon: Icon(Icons.upload_outlined, size: 16, color: AppColors.ink),
-                        label: Text('Add documents', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink)),
+              _kpiGrid(context, showBookings: showCalendar, showOrders: showOrders, bookings: bks.length, ordersCount: vm.ordersCount),
+              if (showCalendar) ...[
+                _sectionHeader('Bookings', 'Calendar →', () => _goTab(context, 'Calendar')),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          _stat(fmtN(bks.length), 'total'),
+                          _stat(fmtN(bksWeek), 'this week'),
+                          _stat(fmtN(bksMonth), 'this month'),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      if (bks.isEmpty)
+                        _empty('No bookings yet.')
+                      else
+                        ...bks.take(5).map((b) => bookingRow(context, b)),
+                    ],
+                  ),
                 ),
-              ),
+              ],
+              if (showOrders) ...[
+                _sectionHeader('Orders', 'View all →', () => _goTab(context, 'Orders')),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          _stat(fmtN(orders.length), 'total'),
+                          _stat(fmtN(ordersWeek), 'this week'),
+                          _stat(fmtN(ordersMonth), 'this month'),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (orders.isEmpty)
+                        _empty('No orders yet.')
+                      else
+                        ...orders.take(5).map((o) => orderRow(context, o)),
+                    ],
+                  ),
+                ),
+              ],
+              if (showKnowledge) ...[
+                _sectionHeader('Files uploaded', 'Manage →', () => _goTab(context, 'Knowledge')),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (vm.docs.isEmpty)
+                        _empty('No files yet. Add your policies, price lists or FAQs so the agent answers from them.')
+                      else
+                        ...vm.docs.take(4).map((d) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(9)),
+                                    alignment: Alignment.center,
+                                    child: Icon(businessIcon(d.isFile ? 'file' : 'doc'), size: 17, color: AppColors.accent),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.ink)),
+                                        Text(d.meta, style: AppFonts.body(size: 11, color: AppColors.ink3)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppColors.paper2,
+                            side: BorderSide(color: AppColors.line2),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                          ),
+                          onPressed: () => _goTab(context, 'Knowledge'),
+                          icon: Icon(Icons.upload_outlined, size: 16, color: AppColors.ink),
+                          label: Text('Add documents', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.ink)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -215,39 +227,27 @@ class _DashboardBody extends StatelessWidget {
     );
   }
 
-  void _goTab(BuildContext context, int i) {
+  void _goTab(BuildContext context, String label) {
     final state = context.findAncestorStateOfType<State<HomeShellView>>();
-    (state as dynamic)?.goToTab(i);
+    (state as dynamic)?.goToTab(label);
   }
 
-  Widget _hero(String name, String owner, String greet, String? category, String? hours, Plan plan) {
+  Widget _hero(String name, String owner, String greet, String? category, String? hours) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(gradient: AppColors.chromeGradient, borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      owner.isNotEmpty ? '$greet, ${owner.split(' ').first}' : greet,
-                      style: AppFonts.mono(size: 10.5, color: AppColors.chromeTx, letterSpacing: 1.5),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(name, style: AppFonts.display(size: 21, color: Colors.white)),
-                  ],
-                ),
+              Text(
+                owner.isNotEmpty ? '$greet, ${owner.split(' ').first}' : greet,
+                style: AppFonts.mono(size: 10.5, color: AppColors.chromeTx, letterSpacing: 1.5),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.chromeLine)),
-                child: Text(plan.name, style: AppFonts.mono(size: 10, color: Colors.white, letterSpacing: 1)),
-              ),
+              const SizedBox(height: 6),
+              Text(stripTrailingId(name), style: AppFonts.display(size: 21, color: Colors.white)),
             ],
           ),
           if (category != null || hours != null) ...[
@@ -275,7 +275,14 @@ class _DashboardBody extends StatelessWidget {
         ],
       );
 
-  Widget _kpiGrid(BuildContext context, int bookings, int ordersCount) {
+  Widget _kpiGrid(BuildContext context, {required bool showBookings, required bool showOrders, required int bookings, required int ordersCount}) {
+    final tiles = [
+      if (showBookings)
+        _kpi(Icons.calendar_month_outlined, fmtN(bookings), 'Bookings', AppColors.accent, AppColors.accentSoft, () => _goTab(context, 'Calendar')),
+      if (showOrders)
+        _kpi(Icons.shopping_bag_outlined, fmtN(ordersCount), 'Orders', const Color(0xFF4F46E5), const Color(0x194F46E5), () => _goTab(context, 'Orders')),
+    ];
+    if (tiles.isEmpty) return const SizedBox.shrink();
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -283,10 +290,7 @@ class _DashboardBody extends StatelessWidget {
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
       childAspectRatio: 1.5,
-      children: [
-        _kpi(Icons.calendar_month_outlined, fmtN(bookings), 'Bookings', AppColors.accent, AppColors.accentSoft, () => _goTab(context, 1)),
-        _kpi(Icons.shopping_bag_outlined, fmtN(ordersCount), 'Orders', const Color(0xFF4F46E5), const Color(0x194F46E5), () => _goTab(context, 2)),
-      ],
+      children: tiles,
     );
   }
 
@@ -533,7 +537,7 @@ bool isTimeOnlyKey(String key) {
 
 String formatTimeOnlyValue(String raw) {
   final value = stripTrailingId(stripHtml(raw));
-  final dt = DateTime.tryParse(value);
+  final dt = parseFlexibleTime(value);
   return dt == null ? value : fmtTimeOnly(dt);
 }
 

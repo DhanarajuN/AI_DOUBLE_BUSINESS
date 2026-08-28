@@ -43,10 +43,20 @@ class AuthRepository extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Comma-separated AIDOUBLE_BROKER_HIDE_ITEMS / AIDOUBLE_BUSINESS_HIDE_ITEMS
+  // names from /api/v1/module-constants — null until fetched (or if the
+  // fetch fails). Exactly one of these is ever populated for a given
+  // session: which one depends on the signed-in role (see fetchModuleConstants).
+  List<String>? _brokerHideItems;
+  List<String>? _businessHideItems;
+
   AuthStatus get status => _status;
   User? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  List<String>? get brokerHideItems => _brokerHideItems;
+  List<String>? get businessHideItems => _businessHideItems;
+  List<String>? get hideItems => _brokerHideItems ?? _businessHideItems;
 
   Future<void> restoreSession() async {
     final session = await _sessionStorage.readSession();
@@ -64,9 +74,39 @@ class AuthRepository extends ChangeNotifier {
       // reloaded every time. This re-fetches the real current name and
       // self-corrects silently before anything else uses it.
       await _refreshCurrentUserName();
+      await fetchModuleConstants();
       unawaited(PushNotificationService().registerForCurrentUser());
     }
     notifyListeners();
+  }
+
+  // Background prefetch, not something any screen blocks on waiting for —
+  // silent: true, same reasoning as every other best-effort call here.
+  Future<void> fetchModuleConstants() async {
+    try {
+      final json =
+          await _apiClient.get(ServerUrls.moduleConstants, silent: true)
+              as Map<String, dynamic>;
+      final moduleConstants = json['moduleConstants'] as List?;
+      final first = (moduleConstants != null && moduleConstants.isNotEmpty)
+          ? moduleConstants[0] as Map<String, dynamic>
+          : null;
+      final data = first?['data'] as Map<String, dynamic>?;
+      // AIDOUBLE_BROKER_HIDE_ITEMS / AIDOUBLE_BUSINESS_HIDE_ITEMS are each
+      // scoped to their own role — a broker login must never be hidden by
+      // the business-head key, and vice versa.
+      final isBroker = (_currentUser?.roleName ?? '').toLowerCase().contains('broker');
+      final key = isBroker ? 'AIDOUBLE_BROKER_HIDE_ITEMS' : 'AIDOUBLE_BUSINESS_HIDE_ITEMS';
+      final hideItems = (data?[key] as String?)
+          ?.split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      _brokerHideItems = isBroker ? hideItems : null;
+      _businessHideItems = isBroker ? null : hideItems;
+    } catch (e, st) {
+      AppLogger.e('AuthRepository', 'fetchModuleConstants failed', e, st);
+    }
   }
 
   /// Re-fetches this account's real current name from its own backend
@@ -235,6 +275,7 @@ class AuthRepository extends ChangeNotifier {
     _apiClient.setAccessToken(accessToken);
     _currentUser = user;
     _status = AuthStatus.authenticated;
+    await fetchModuleConstants();
     // businessId (if any) isn't resolved yet at this exact point — that
     // happens separately, right after this, via business_lookup_service.dart
     // from the splash/login/signup views — which registers again once it's
@@ -378,6 +419,8 @@ class AuthRepository extends ChangeNotifier {
     await _sessionStorage.clearBusinessData();
     _apiClient.setAccessToken(null);
     _currentUser = null;
+    _brokerHideItems = null;
+    _businessHideItems = null;
     _status = AuthStatus.unauthenticated;
     notifyListeners();
   }
@@ -403,6 +446,8 @@ class AuthRepository extends ChangeNotifier {
       await _sessionStorage.clearBusinessData();
       _apiClient.setAccessToken(null);
       _currentUser = null;
+      _brokerHideItems = null;
+      _businessHideItems = null;
       _status = AuthStatus.unauthenticated;
       _errorMessage = 'Your session has expired. Please sign in again.';
       notifyListeners();

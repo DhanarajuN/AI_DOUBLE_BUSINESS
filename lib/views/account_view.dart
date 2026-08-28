@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/plan.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
@@ -9,9 +8,8 @@ import '../services/job_instance_update_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/account_view_model.dart';
-import 'dashboard_view.dart' show fmtN, fmtTok, initialsOf;
+import 'dashboard_view.dart' show fmtN, fmtTok, initialsOf, stripTrailingId;
 import 'job_instance_edit_view.dart';
-import 'plans_view.dart';
 
 const _kSwatches = ['#1D4ED8', '#0F3D6E', '#0D9488', '#4F46E5', '#334155', '#0E8A5F'];
 
@@ -56,11 +54,11 @@ class _AccountBodyState extends State<_AccountBody> {
     }
   }
 
-  Future<void> _editBusiness(BuildContext context, AccountViewModel vm) async {
+  Future<void> _editBusiness(BuildContext context, AccountViewModel vm, {required bool isBroker}) async {
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => JobInstanceEditView(
-        title: 'Edit Business',
-        jobTypeName: 'Business',
+        title: isBroker ? 'Edit Broker' : 'Edit Business',
+        jobTypeName: isBroker ? 'Broker' : 'Business',
         instanceId: vm.businessId ?? '',
         initialData: vm.businessData ?? const {},
         onSave: (id, values, jobTypeId) =>
@@ -76,10 +74,14 @@ class _AccountBodyState extends State<_AccountBody> {
     final user = vm.user;
     final biz = vm.business;
     final data = vm.businessData;
-    final bizName = _firstNonEmpty(data, const ['Business Name', 'businessName', 'Company Name', 'Name']);
-    final bizCategory = _firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
-    final plan = biz != null ? planById(biz.planId) : null;
-    final c = kCurrencies[vm.currency]!;
+    final isBroker = (user?.roleName ?? '').toLowerCase().contains('broker');
+    final bizNameRaw = isBroker
+        ? _firstNonEmpty(data, const ['Broker Name', 'Name', 'Full Name'])
+        : _firstNonEmpty(data, const ['Business Name', 'businessName', 'Company Name', 'Name']);
+    final bizName = bizNameRaw != null ? stripTrailingId(bizNameRaw) : null;
+    final bizCategory = isBroker
+        ? _firstNonEmpty(data, const ['Email', 'Phone Number', 'Mobile Number'])
+        : _firstNonEmpty(data, const ['Business Category', 'businessCategory'])?.split('(').first.trim();
 
     return Scaffold(
       backgroundColor: AppColors.paper2,
@@ -135,25 +137,20 @@ class _AccountBodyState extends State<_AccountBody> {
                 ],
               ),
             ),
-            if (plan != null) ...[
-              _sectionTitle('Business'),
+            if (biz != null) ...[
+              _sectionTitle(isBroker ? 'Broker' : 'Business'),
               _card(
                 child: Column(
                   children: [
                     if (bizName != null || bizCategory != null) ...[
-                      _row(Icons.storefront_outlined, bizName ?? 'Business', bizCategory ?? '—',
+                      _row(isBroker ? Icons.badge_outlined : Icons.storefront_outlined,
+                          bizName ?? (isBroker ? 'Broker' : 'Business'), bizCategory ?? '—',
                           trailing: TextButton(
-                            onPressed: () => _editBusiness(context, vm),
+                            onPressed: () => _editBusiness(context, vm, isBroker: isBroker),
                             child: Text('Edit', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent)),
                           )),
                       Divider(height: 20, color: AppColors.line),
                     ],
-                    _row(Icons.local_offer_outlined, '${plan.name} plan', plan.price != null ? '${c.symbol}${fmtN(plan.price![vm.currency]!)} / month' : 'Custom pricing',
-                        trailing: TextButton(
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlansView())),
-                          child: Text('Change', style: AppFonts.body(size: 12.5, weight: FontWeight.w600, color: AppColors.accent)),
-                        )),
-                    Divider(height: 20, color: AppColors.line),
                     _row(Icons.bar_chart_outlined, '${fmtTok(vm.usageIn + vm.usageOut)} tokens used', '${fmtN(vm.usageCalls)} AI calls · ${fmtN(vm.bookingCount)} bookings'),
                   ],
                 ),

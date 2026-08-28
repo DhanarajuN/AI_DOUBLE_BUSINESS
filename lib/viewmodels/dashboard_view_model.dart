@@ -102,7 +102,6 @@ class DashboardViewModel extends ChangeNotifier {
     await Future.wait([
       _fetchFirstPage(_products, AppConstants.jobTypeProducts),
       _fetchFirstPage(_services, AppConstants.jobTypeServices),
-      _fetchFirstPage(_providers, _providersTypeName),
     ]);
     notifyListeners();
   }
@@ -137,7 +136,7 @@ class DashboardViewModel extends ChangeNotifier {
       case 'education':
         return 'Tutors';
       case 'insurance':
-        return 'Brokers';
+        return 'Broker';
       default:
         return AppConstants.jobTypeProviders;
     }

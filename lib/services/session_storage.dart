@@ -19,8 +19,8 @@ class SessionStorage {
   static const _roleNameKey = 'auth_role_name';
   static const _businessIdKey = 'gosure_business_id';
   static const _businessDataKey = 'gosure_business_data';
-  static const _rememberedUsernameKey = 'remembered_username';
-  static const _rememberedPasswordKey = 'remembered_password';
+  static const _rememberedUsernameKeyBase = 'remembered_username';
+  static const _rememberedPasswordKeyBase = 'remembered_password';
 
   Future<String?> readAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -84,25 +84,28 @@ class SessionStorage {
     await prefs.remove(_roleNameKey);
   }
 
+  String _rememberedUsernameKey(bool isBroker) => isBroker ? '${_rememberedUsernameKeyBase}_broker' : _rememberedUsernameKeyBase;
+  String _rememberedPasswordKey(bool isBroker) => isBroker ? '${_rememberedPasswordKeyBase}_broker' : _rememberedPasswordKeyBase;
+
   Future<void> saveRememberedCredentials(
-      {required String username, required String password}) async {
+      {required String username, required String password, bool isBroker = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_rememberedUsernameKey, username);
-    await prefs.setString(_rememberedPasswordKey, password);
+    await prefs.setString(_rememberedUsernameKey(isBroker), username);
+    await prefs.setString(_rememberedPasswordKey(isBroker), password);
   }
 
-  Future<({String username, String password})?> readRememberedCredentials() async {
+  Future<({String username, String password})?> readRememberedCredentials({bool isBroker = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString(_rememberedUsernameKey);
-    final password = prefs.getString(_rememberedPasswordKey);
+    final username = prefs.getString(_rememberedUsernameKey(isBroker));
+    final password = prefs.getString(_rememberedPasswordKey(isBroker));
     if (username == null || password == null) return null;
     return (username: username, password: password);
   }
 
-  Future<void> clearRememberedCredentials() async {
+  Future<void> clearRememberedCredentials({bool isBroker = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_rememberedUsernameKey);
-    await prefs.remove(_rememberedPasswordKey);
+    await prefs.remove(_rememberedUsernameKey(isBroker));
+    await prefs.remove(_rememberedPasswordKey(isBroker));
   }
 
   // Cache for the businessId auto-resolved from the signed-in user's account (see

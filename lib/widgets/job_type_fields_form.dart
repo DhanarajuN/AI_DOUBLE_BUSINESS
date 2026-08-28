@@ -15,7 +15,7 @@ import '../services/api_client.dart';
 import '../services/app_logger.dart';
 import '../services/friendly_error.dart';
 import '../theme/app_theme.dart';
-import '../utils/date_format.dart' show fmtDateDMY, fmtDateTimeDMY, fmtTimeOnly;
+import '../utils/date_format.dart' show fmtDateDMY, fmtDateTimeDMY, fmtTimeOnly, parseFlexibleTime;
 import 'searchable_options_picker.dart';
 
 // "#" in the mask is a placeholder consumed by the next raw input character
@@ -175,8 +175,10 @@ class JobTypeFieldsForm extends StatelessWidget {
       // A UTC/offset value must be converted before it's used as the date
       // and time pickers' initialDate/initialTime — those read wall-clock
       // fields directly, and Flutter's date picker also rejects a
-      // UTC-flagged initialDate outright.
-      return _dateField(context, field, DateTime.tryParse(raw)?.toLocal());
+      // UTC-flagged initialDate outright. A Time field's stored value can
+      // also come back as a bare "10:00" with no date at all.
+      final current = field.isTimePicker ? parseFlexibleTime(raw) : DateTime.tryParse(raw)?.toLocal();
+      return _dateField(context, field, current);
     }
     if (field.hasPercentRule) return _PercentTextField(field: field, valueOf: valueOf, onTextChanged: onTextChanged);
     if (field.mask.isNotEmpty) return _MaskedTextField(field: field, valueOf: valueOf, onTextChanged: onTextChanged);

@@ -4,6 +4,7 @@ import '../repositories/auth_repository.dart';
 import '../repositories/workspace_repository.dart';
 import '../routes/app_routes.dart';
 import '../services/api_client.dart';
+import '../services/app_logger.dart';
 import '../services/business_lookup_service.dart';
 import '../services/session_storage.dart';
 import '../theme/app_theme.dart';
@@ -13,22 +14,24 @@ import '../widgets/google_logo.dart';
 
 class LoginFormView extends StatelessWidget {
   final bool showDefaultPasswordNotice;
+  final bool isBroker;
 
-  const LoginFormView({super.key, this.showDefaultPasswordNotice = false});
+  const LoginFormView({super.key, this.showDefaultPasswordNotice = false, this.isBroker = false});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (ctx) => LoginViewModel(ctx.read<AuthRepository>()),
-      child: _LoginFormBody(showDefaultPasswordNotice: showDefaultPasswordNotice),
+      child: _LoginFormBody(showDefaultPasswordNotice: showDefaultPasswordNotice, isBroker: isBroker),
     );
   }
 }
 
 class _LoginFormBody extends StatefulWidget {
   final bool showDefaultPasswordNotice;
+  final bool isBroker;
 
-  const _LoginFormBody({required this.showDefaultPasswordNotice});
+  const _LoginFormBody({required this.showDefaultPasswordNotice, required this.isBroker});
 
   @override
   State<_LoginFormBody> createState() => _LoginFormBodyState();
@@ -39,10 +42,12 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _rememberMe = false;
+  late bool _isBroker;
 
   @override
   void initState() {
     super.initState();
+    _isBroker = widget.isBroker;
     _loadRememberedCredentials();
     if (widget.showDefaultPasswordNotice) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,13 +61,18 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
 
   Future<void> _loadRememberedCredentials() async {
     final remembered =
-        await context.read<SessionStorage>().readRememberedCredentials();
-    if (remembered == null || !mounted) return;
+        await context.read<SessionStorage>().readRememberedCredentials(isBroker: _isBroker);
+    if (!mounted) return;
     setState(() {
-      _usernameCtrl.text = remembered.username;
-      _passwordCtrl.text = remembered.password;
-      _rememberMe = true;
+      _usernameCtrl.text = remembered?.username ?? '';
+      _passwordCtrl.text = remembered?.password ?? '';
+      _rememberMe = remembered != null;
     });
+  }
+
+  void _toggleBroker() {
+    setState(() => _isBroker = !_isBroker);
+    _loadRememberedCredentials();
   }
 
   @override
@@ -72,6 +82,29 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     super.dispose();
   }
 
+  bool _roleNameIsBroker(String roleName) => roleName.toLowerCase().contains('broker');
+
+  // Both sign-in modes hit the same login API — nothing server-side stops a
+  // broker from signing in through the Business toggle or vice versa. This
+  // enforces it client-side: the account's actual role (from the login
+  // response) must match the mode the user picked, or the session is torn
+  // back down and they're told which kind of account this actually is.
+  Future<bool> _enforceModeMatchesRole() async {
+    final auth = context.read<AuthRepository>();
+    final roleName = auth.currentUser?.roleName ?? '';
+    if (_roleNameIsBroker(roleName) == _isBroker) return true;
+
+    await auth.logout();
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isBroker ? 'This is not a broker account.' : 'This is not a business account.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return false;
+  }
+
   Future<void> _submit(LoginViewModel vm) async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
@@ -79,11 +112,13 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     final password = _passwordCtrl.text;
     final success = await vm.login(username: username, password: password);
     if (success && mounted) {
+      if (!await _enforceModeMatchesRole()) return;
+      if (!mounted) return;
       final storage = context.read<SessionStorage>();
       if (_rememberMe) {
-        await storage.saveRememberedCredentials(username: username, password: password);
+        await storage.saveRememberedCredentials(username: username, password: password, isBroker: _isBroker);
       } else {
-        await storage.clearRememberedCredentials();
+        await storage.clearRememberedCredentials(isBroker: _isBroker);
       }
       if (!mounted) return;
       await _navigateAfterAuth();
@@ -94,6 +129,8 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     FocusScope.of(context).unfocus();
     final success = await vm.loginWithGoogle();
     if (success && mounted) {
+      if (!await _enforceModeMatchesRole()) return;
+      if (!mounted) return;
       await _navigateAfterAuth();
     } else if (!success && mounted && vm.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -106,10 +143,18 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
     final user = context.read<AuthRepository>().currentUser;
     final identity = user?.username ?? '';
     final workspace = context.read<WorkspaceRepository>();
-    await workspace.ensureBusinessBelongsTo(identity);
-    await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: identity);
+    try {
+      await workspace.ensureBusinessBelongsTo(identity);
+      await workspace.ensureDefaultBusiness(name: user?.name ?? 'My business', owner: user?.name ?? '', email: identity);
+    } catch (e, st) {
+      AppLogger.e('LoginForm', 'ensureBusinessBelongsTo/ensureDefaultBusiness failed for $identity', e, st);
+    }
     if (!mounted) return;
-    await resolveBusinessForEmail(context.read<SessionStorage>(), context.read<ApiClient>(), identity);
+    try {
+      await resolveBusinessForEmail(context.read<SessionStorage>(), context.read<ApiClient>(), identity);
+    } catch (e, st) {
+      AppLogger.e('LoginForm', 'resolveBusinessForEmail failed for $identity', e, st);
+    }
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
   }
@@ -135,11 +180,13 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
                   const Center(child: AppLogoMark(size: 76)),
                   const SizedBox(height: 20),
                   Center(
-                    child: Text('AI Double', style: AppFonts.display(size: 30, weight: FontWeight.w800, color: AppColors.chrome)),
+                    child: Text('AI Double',
+                        style: AppFonts.display(size: 30, weight: FontWeight.w800, color: AppColors.chrome)),
                   ),
                   const SizedBox(height: 6),
                   Center(
-                    child: Text('Sign in to continue', style: AppFonts.body(size: 14.5, color: AppColors.ink2)),
+                    child: Text(_isBroker ? 'Sign in to continue as a broker' : 'Sign in to continue as a business',
+                        style: AppFonts.body(size: 14.5, color: AppColors.ink2)),
                   ),
                   const SizedBox(height: 32),
                   if (vm.errorMessage != null) ...[
@@ -256,6 +303,14 @@ class _LoginFormBodyState extends State<_LoginFormBody> {
                               Text('Continue with Google', style: AppFonts.body(size: 15, weight: FontWeight.w600, color: AppColors.ink)),
                             ],
                           ),
+                  ),
+                  const SizedBox(height: 18),
+                  Center(
+                    child: TextButton(
+                      onPressed: _toggleBroker,
+                      child: Text(_isBroker ? 'Sign in as Business' : 'Sign in as Broker',
+                          style: AppFonts.body(size: 13.5, weight: FontWeight.w600, color: AppColors.accent)),
+                    ),
                   ),
                 ],
               ),
